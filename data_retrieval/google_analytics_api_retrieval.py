@@ -21,6 +21,9 @@ from dtos.page_dto import PageDto
 from dtos.google_analytics_filter_clause_dto import GoogleAnalyticsFilterClause
 from dtos.google_analytics_request_config_dto import GoogleAnalyticsRequestConfig
 
+from google.analytics.data_v1beta import BetaAnalyticsDataClient
+from google.analytics.data_v1beta.types import (DateRange, Dimension, Metric, RunReportRequest)
+
 # pylint: enable=wrong-import-position
 
 class GoogleAnalyticsApiRetrieval():
@@ -109,6 +112,39 @@ class GoogleAnalyticsApiRetrieval():
             'operator': operator,
             'expressions': [expression]
         }
+    
+    def get_batch_data_v4(self,
+                       property_id: str,
+                       request_config: GoogleAnalyticsRequestConfig,
+                       filter_clause: GoogleAnalyticsFilterClause):
+        self.refresh_oauth_token()
+
+        client = BetaAnalyticsDataClient(credentials=self.creds)
+        
+        dimensions_list = [Dimension(name=d)
+                           for d in request_config.dimensions]
+        
+        metrics_list = [Metric(name=m)
+                        for m in request_config.metrics]
+        
+        start_date = self.date_helper.convert_date_to_yyyy_mm_dd(filter_clause.date_range.start_date)
+        end_date = self.date_helper.convert_date_to_yyyy_mm_dd(filter_clause.date_range.end_date)
+
+        request = RunReportRequest(
+            property=f"properties/{property_id}",
+            dimensions=dimensions_list,
+            metrics=metrics_list,
+            date_ranges=[DateRange(start_date=start_date, end_date=end_date)]
+        )
+
+        response = client.run_report(request)
+
+        for row in response.rows:
+            print(row.dimension_values[0].value, row.metric_values[0].value)
+
+        print('completed fetching rows')
+
+        return response
 
     def get_batch_data(self,
                        view_id: str,
@@ -179,7 +215,11 @@ class GoogleAnalyticsApiRetrieval():
         while True:
             new_page_dto = PageDto(filter_clause.page_dto.page_size, page_token)
             filter_clause.set_page_dto(new_page_dto)
-            response = self.get_batch_data(view_id=view_id,
+            # response = self.get_batch_data(view_id=view_id,
+            #                                request_config=request_config,
+            #                                filter_clause=filter_clause)
+
+            response = self.get_batch_data_v4(property_id=view_id,
                                            request_config=request_config,
                                            filter_clause=filter_clause)
             self.log.debug('request_config %s, date_range %s,\

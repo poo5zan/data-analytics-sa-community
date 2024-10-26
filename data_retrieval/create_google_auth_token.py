@@ -9,9 +9,9 @@ SCOPES = [
     'https://www.googleapis.com/auth/analytics',
     'openid'
     ]
-CLIENT_SECRETS_FILE = './credentials/credentials.json'
+CLIENT_SECRETS_FILE = './credentials/oauth_credentials.json'
 
 flow = InstalledAppFlow.from_client_secrets_file(CLIENT_SECRETS_FILE, SCOPES)
-creds = flow.run_local_server(port=0)
+creds = flow.run_local_server()
 with open('./credentials/token.json', 'w', encoding='UTF-8') as token:
     token.write(creds.to_json())

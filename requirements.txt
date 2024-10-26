@@ -11,3 +11,4 @@ pylint
 Flask
 gunicorn
 PyPDF2
+google-analytics-data
