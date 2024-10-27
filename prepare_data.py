@@ -6,8 +6,8 @@ from helpers.cu_dataset_reader import CuDatasetReader
 from helpers.string_helper import StringHelper
 from helpers.enums import DataModule
 from helpers.file_helper import FileHelper
-from data_retrieval.google_analytics_api_retrieval import GoogleAnalyticsFilterClause
-from data_retrieval.google_analytics_data import GoogleAnalyticsData
+from google_analytics_module.google_analytics_api import GoogleAnalyticsFilterClause
+from google_analytics_module.google_analytics_data import GoogleAnalyticsData
 from data_transform.clean_landing_page import CleanLandingPage
 
 

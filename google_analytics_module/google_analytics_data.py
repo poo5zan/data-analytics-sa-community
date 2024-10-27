@@ -10,12 +10,12 @@ print(os.getcwd())
 import uuid
 import logging
 import pandas as pd
-from data_retrieval.google_analytics_api_retrieval_v3 import GoogleAnalyticsApiRetrievalV3
+from google_analytics_module.repositories.google_analytics_api_retrieval_v3 import GoogleAnalyticsApiRetrievalV3
 from helpers.file_helper import FileHelper
 from helpers.settings_helper import SettingsHelper
 from helpers.date_helper import DateHelper
 from helpers.enums import DataModule, GoogleAuthenticationMethod
-from dtos.google_analytics_filter_clause_dto import GoogleAnalyticsFilterClause
+from google_analytics_module.dtos.google_analytics_filter_clause_dto import GoogleAnalyticsFilterClause
 from dtos.page_dto import PageDto
 # pylint: enable=wrong-import-position
 

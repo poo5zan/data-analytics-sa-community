@@ -1,10 +1,10 @@
 """Google Analytics Jobs Module"""
 import logging
 from datetime import date, timedelta
-from data_retrieval.google_analytics_api_retrieval_v3 import GoogleAnalyticsApiRetrievalV3
+from google_analytics_module.repositories.google_analytics_api_retrieval_v3 import GoogleAnalyticsApiRetrievalV3
 from dtos.date_range_dto import DateRangeDto
 
-from dtos.google_analytics_filter_clause_dto import GoogleAnalyticsFilterClause
+from google_analytics_module.dtos.google_analytics_filter_clause_dto import GoogleAnalyticsFilterClause
 from dtos.page_dto import PageDto
 from helpers.enums import DataFrequency, DataModule, GoogleAuthenticationMethod, JobStatus
 from helpers.metadata_helper import JobConfig, MetadataHelper
