@@ -40,19 +40,20 @@ class CleanLandingPage():
 
         return text.strip()
 
-    def get_sessions_by_organization(self, df_ga_orig: pd.DataFrame) -> pd.DataFrame:
+    def get_sessions_by_organization(self, df_ga_orig: pd.DataFrame,
+                                     landing_page_column_name: str = 'landingPage') -> pd.DataFrame:
         """get sessions by organization"""
         df_ga = df_ga_orig.dropna().copy()
-        df_ga['organization_id_name'] = df_ga['landing_page'].apply(
+        df_ga['organization_id_name'] = df_ga[landing_page_column_name].apply(
             self.clean_landing_page_text)
         df_ga['organization_id'] = df_ga['organization_id_name'].apply(
             self.get_organization_id)
         df_ga['organization_name'] = df_ga['organization_id_name'].apply(
             self.get_organization_name)
-        return df_ga[["landing_page", "organization_id_name", "organization_id",
+        return df_ga[[landing_page_column_name, "organization_id_name", "organization_id",
                       "organization_name", "sessions"]]
 
-    def process_data(self, landing_page_df, sa_community_df) -> pd.DataFrame:
+    def process_data(self, landing_page_df, sa_community_df, landing_page_column_name = 'landingPage') -> pd.DataFrame:
         """process data"""
         sessions_data_df = self.get_sessions_by_organization(landing_page_df)
         results = []
@@ -87,7 +88,7 @@ class CleanLandingPage():
             # print('org_names_google ', org_names_google)
             landing_page = self.sacommunity_url + \
                 sessions_data_df[sessions_data_df["organization_id"]
-                                                  == org_id]["landing_page"].values[0]
+                                                  == org_id][landing_page_column_name].values[0]
             results.append({
                 'org_id': org_id,
                 'landing_page': landing_page,
