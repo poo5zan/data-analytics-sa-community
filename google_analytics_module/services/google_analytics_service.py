@@ -30,10 +30,6 @@ class GoogleAnalyticsService():
 
         return results
 
-    def get_sessions_by_gender(self):
-        """get session data by gender"""
-        return None
-    
     def get_sessions_by_landing_page(self, dataset_id:str, start_date:date, end_date:date):
         """get session data with landing page"""
         dimensions = ["customEvent:DatasetID",  "landingPage"]
@@ -45,10 +41,46 @@ class GoogleAnalyticsService():
         results = self.get_sessions_by_landing_page(dataset_id, start_date, end_date)
         return pd.DataFrame(results)
 
-    def get_sessions_by_age(self):
+    def get_sessions_by_age(self, dataset_id:str, start_date:date, end_date:date):
         """get sessions data by age"""
-        return None
+        dimensions = ["customEvent:DatasetID",  "userAgeBracket"]
+        metrics = ["sessions"]
+        
+        return self.get_data(dataset_id, start_date, end_date, dimensions, metrics)
+ 
+    def get_sessions_by_age_as_df(self, dataset_id:str, start_date:date, end_date:date):
+        results = self.get_sessions_by_age(dataset_id, start_date, end_date)
+        return pd.DataFrame(results)
 
-    def get_page_views_and_sessions(self):
-        """get page views"""
-        return None
+    def get_sessions_by_gender(self, dataset_id:str, start_date:date, end_date:date):
+        """get session data by gender"""
+        dimensions = ["customEvent:DatasetID",  "userGender"]
+        metrics = ["sessions"]
+        
+        return self.get_data(dataset_id, start_date, end_date, dimensions, metrics)
+    
+    def get_sessions_by_gender_as_df(self, dataset_id:str, start_date:date, end_date:date):
+        results = self.get_sessions_by_gender(dataset_id, start_date, end_date)
+        return pd.DataFrame(results)
+
+    def get_sessions_by_source(self, dataset_id:str, start_date:date, end_date:date):
+        """get session data by source"""
+        dimensions = ["customEvent:DatasetID",  "sessionSource"]
+        metrics = ["sessions"]
+        
+        return self.get_data(dataset_id, start_date, end_date, dimensions, metrics)
+    
+    def get_sessions_by_source_as_df(self, dataset_id:str, start_date:date, end_date:date):
+        results = self.get_sessions_by_source(dataset_id, start_date, end_date)
+        return pd.DataFrame(results)
+
+    def get_sessions_by_medium(self, dataset_id:str, start_date:date, end_date:date):
+        """get session data by source"""
+        dimensions = ["customEvent:DatasetID",  "sessionMedium"]
+        metrics = ["sessions"]
+        
+        return self.get_data(dataset_id, start_date, end_date, dimensions, metrics)
+
+    def get_sessions_by_medium_as_df(self, dataset_id:str, start_date:date, end_date:date):
+        results = self.get_sessions_by_medium(dataset_id, start_date, end_date)
+        return pd.DataFrame(results)
