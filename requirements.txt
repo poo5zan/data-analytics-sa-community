@@ -13,3 +13,4 @@ gunicorn
 PyPDF2
 google-analytics-data
 jsonlines
+joblib

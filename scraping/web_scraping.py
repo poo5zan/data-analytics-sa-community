@@ -19,7 +19,7 @@ from dtos.get_data_from_url_request_dto import GetDataFromUrlRequestDto
 from helpers.file_helper import FileHelper
 from helpers.settings_helper import SettingsHelper
 from helpers.string_helper import StringHelper
-
+from joblib import Parallel, delayed
 
 class WebScraping():
     """web scraping"""
@@ -300,68 +300,79 @@ class WebScraping():
 
         return all_address
     
+    def scrape_council_name_based_on_cu_export_df(self,
+                                                  row_counter,
+                                                  total,
+                                                  row,
+                                                  output_records,
+                                                  output_file_path):
+        org_id = row["ID_19"]
+        address = str(row["Street_Address_Line_1"]) + " " + str(row["Suburb"])
+        council = row["Organisati_Council"]
+        electorate_state = row["Organisati_Electorate_State_"]
+        electorate_federal = row["Organisati_Electorate_Federal_"]
+
+        existing_record = [o for o in output_records if o.get("org_id") == org_id]
+        if len(existing_record) > 0:
+            self.log.info(self.log.info(f"Record exists: Skipping council for org {org_id}, address {address}. Progress {row_counter + 1} of {total}"))
+            return None
+
+        self.log.info(f"Scraping council for org {org_id}, address {address}. Progress {row_counter + 1} of {total}")
+
+        error_message = ""
+        has_error = False
+        council_scraped = ""
+        electorate_state_scraped = ""
+        scraped_text = ""
+        if self.string_helper.is_null_or_whitespace(address):
+            error_message = "address is null or empty"
+            has_error = True
+        else:
+            address_cleaned = address.strip()
+            
+            try:
+                council_by_address = self.find_council_by_address(address_cleaned)
+                council_scraped = council_by_address.get("council_name", "")
+                electorate_state_scraped = council_by_address.get("electoral_ward", "")
+                scraped_text = council_by_address.get("text", "")
+            except Exception as ex:
+                has_error = True
+                error_message = str(ex)
+                self.log.error(ex)
+
+        scraped_council = {
+            "org_id": org_id,
+            "address": address,
+            "council": council,
+            "electorate_state": electorate_state,
+            "electorate_federal": electorate_federal,
+            "error_message": error_message,
+            "has_error": has_error,
+            "council_scraped": council_scraped,
+            "electorate_state_scraped": electorate_state_scraped,
+            "is_council_correct": council == council_scraped,
+            "is_electorate_state_correct": electorate_state == electorate_state_scraped,
+            "scraped_text": scraped_text
+        }
+
+        if not self.string_helper.is_null_or_whitespace(output_file_path):
+            self.file_helper.write_jsonlines(output_file_path, scraped_council)
 
     def scrape_council_names_based_on_cu_export_df(self,
                                                    cu_export_df : pd.DataFrame,
                                                    output_file_path: str = ""):
         total = len(cu_export_df)
-        scraped_councils = []
+        # scraped_councils = []
         output_records = []
         if not self.string_helper.is_null_or_whitespace(output_file_path) and self.file_helper.does_file_exist(output_file_path):
+            self.log.info("Reading output records")
             output_records = self.file_helper.read_jsonlines_all(output_file_path)
-        for i, row in cu_export_df.iterrows():
-            org_id = row["ID_19"]
-            address = str(row["Street_Address_Line_1"]) + " " + str(row["Suburb"])
-            council = row["Organisati_Council"]
-            electorate_state = row["Organisati_Electorate_State_"]
-            electorate_federal = row["Organisati_Electorate_Federal_"]
+            self.log.info("Completed reading output records")
+       
+        scraped_councils = Parallel(n_jobs=5)(delayed(self.scrape_council_name_based_on_cu_export_df)(row_counter,
+                                                  total,
+                                                  row,
+                                                  output_records,
+                                                  output_file_path) for row_counter,row in cu_export_df.iterrows())
 
-            existing_record = [o for o in output_records if o.get("org_id") == org_id]
-            if len(existing_record) > 0:
-                self.log.info(self.log.info(f"Record exists: Skipping council for org {org_id}, address {address}. Progress {i + 1} of {total}"))
-                continue
-
-            self.log.info(f"Scraping council for org {org_id}, address {address}. Progress {i + 1} of {total}")
-
-            error_message = ""
-            has_error = False
-            council_scraped = ""
-            electorate_state_scraped = ""
-            scraped_text = ""
-            if self.string_helper.is_null_or_whitespace(address):
-                error_message = "address is null or empty"
-                has_error = True
-            else:
-                address_cleaned = address.strip()
-                
-                try:
-                    council_by_address = self.find_council_by_address(address_cleaned)
-                    council_scraped = council_by_address.get("council_name", "")
-                    electorate_state_scraped = council_by_address.get("electoral_ward", "")
-                    scraped_text = council_by_address.get("text", "")
-                except Exception as ex:
-                    has_error = True
-                    error_message = str(ex)
-                    self.log.error(ex)
-
-            scraped_council = {
-                "org_id": org_id,
-                "address": address,
-                "council": council,
-                "electorate_state": electorate_state,
-                "electorate_federal": electorate_federal,
-                "error_message": error_message,
-                "has_error": has_error,
-                "council_scraped": council_scraped,
-                "electorate_state_scraped": electorate_state_scraped,
-                "is_council_correct": council == council_scraped,
-                "is_electorate_state_correct": electorate_state == electorate_state_scraped,
-                "scraped_text": scraped_text
-            }
-
-            if not self.string_helper.is_null_or_whitespace(output_file_path):
-                self.file_helper.write_jsonlines(output_file_path, scraped_council)
-
-            scraped_councils.append(scraped_council)
-
-        return scraped_councils
+        return [s for s in scraped_councils if s is not None]
