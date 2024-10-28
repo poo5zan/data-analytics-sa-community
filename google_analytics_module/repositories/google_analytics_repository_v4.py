@@ -5,7 +5,7 @@ from dtos.date_range_dto import DateRangeDto
 from google_analytics_module.dtos.google_analytics_filter_clause_dto import GoogleAnalyticsFilterClause
 from google_analytics_module.dtos.google_analytics_request_config_dto import GoogleAnalyticsRequestConfig
 from google.analytics.data_v1beta import BetaAnalyticsDataClient
-from google.analytics.data_v1beta.types import (DateRange, Dimension, Metric, RunReportRequest, FilterExpression, Filter)
+from google.analytics.data_v1beta.types import (DateRange, Dimension, Metric, RunReportRequest, FilterExpression, FilterExpressionList, Filter)
 
 class GoogleAnalyticsRepositoryV4(GoogleAnalyticsRepositoryBase):
     """google analytics version 4
@@ -36,11 +36,29 @@ class GoogleAnalyticsRepositoryV4(GoogleAnalyticsRepositoryBase):
         start_date = self.date_helper.convert_date_to_yyyy_mm_dd(filter_clause.date_range.start_date)
         end_date = self.date_helper.convert_date_to_yyyy_mm_dd(filter_clause.date_range.end_date)
 
-        dimension_filter = None
-        if not self.str_helper.is_null_or_whitespace(filter_clause.dataset_id):
-            dimension_filter = FilterExpression(filter=Filter(
-                field_name="customEvent:DatasetID",
-                string_filter=Filter.StringFilter(value=filter_clause.dataset_id)))
+        # if not self.str_helper.is_null_or_whitespace(filter_clause.dataset_id):
+        # dimension_filter = FilterExpression(filter=Filter(
+        #     field_name="customEvent:DatasetID",
+        #     string_filter=Filter.StringFilter(value=filter_clause.dataset_id, match_type=Filter.StringFilter.MatchType.EXACT)))
+
+        dimension_filter=FilterExpression(
+            and_group=FilterExpressionList(
+                expressions=[
+                    FilterExpression(
+                        filter=Filter(
+                            field_name="customEvent:DatasetID",
+                            string_filter=Filter.StringFilter(value=filter_clause.dataset_id, match_type=Filter.StringFilter.MatchType.EXACT),
+                        )
+                    ),
+                    FilterExpression(
+                        filter=Filter(
+                            field_name="eventName",
+                            string_filter=Filter.StringFilter(value="trackCustomData", match_type=Filter.StringFilter.MatchType.EXACT),
+                        )
+                    ),
+                ]
+            )
+        )
 
         request = RunReportRequest(
             property=f"properties/{property_id}",

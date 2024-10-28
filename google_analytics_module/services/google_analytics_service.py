@@ -24,16 +24,12 @@ class GoogleAnalyticsService():
                                                             request_config=request_config,
                                                             filter_clause=filter_clause)
         
-        for result in results:
-            result['start_date'] = start_date
-            result['end_date'] = end_date
-
         return results
 
     def get_sessions_by_landing_page(self, dataset_id:str, start_date:date, end_date:date):
         """get session data with landing page"""
-        dimensions = ["customEvent:DatasetID",  "landingPage"]
-        metrics = ["sessions"]
+        dimensions = ["customEvent:DatasetID",  "landingPage", "eventName", "date"]
+        metrics = ["sessions", "eventCount"]
         
         return self.get_data(dataset_id, start_date, end_date, dimensions, metrics)
     

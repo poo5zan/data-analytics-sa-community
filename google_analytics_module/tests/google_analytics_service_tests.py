@@ -8,8 +8,8 @@ from google_analytics_module.services.google_analytics_service import GoogleAnal
 
 
 google_analytics_service = GoogleAnalyticsService()
-start_date = date(2024,4,1)
-end_date = date(2024,5,1)
-dataset_id = "0QK91R12"
+start_date = date(2023,7,1)
+end_date = date(2024,6,30)
+dataset_id = "0QK91R12" # Burnside
 sessions_by_landing_page = google_analytics_service.get_sessions_by_landing_page(dataset_id, start_date, end_date)
 op = 0

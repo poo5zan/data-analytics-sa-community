@@ -50,8 +50,9 @@ class CleanLandingPage():
             self.get_organization_id)
         df_ga['organization_name'] = df_ga['organization_id_name'].apply(
             self.get_organization_name)
-        return df_ga[[landing_page_column_name, "organization_id_name", "organization_id",
-                      "organization_name", "sessions"]]
+        return df_ga
+        # return df_ga[[landing_page_column_name, "organization_id_name", "organization_id",
+        #               "organization_name", "sessions"]]
 
     def process_data(self, landing_page_df, sa_community_df, landing_page_column_name = 'landingPage') -> pd.DataFrame:
         """process data"""
@@ -89,13 +90,20 @@ class CleanLandingPage():
             landing_page = self.sacommunity_url + \
                 sessions_data_df[sessions_data_df["organization_id"]
                                                   == org_id][landing_page_column_name].values[0]
-            results.append({
+            
+            result = {
                 'org_id': org_id,
                 'landing_page': landing_page,
                 'sessions_count': session_count,
                 'organization_name_sa_community': organization_name_sa_community,
                 'organization_name_google': organization_name_google,
                 'is_record_available_in_sacommunity_db': is_record_available_in_sacommunity_db,
-            })
+            }
+
+            for col in sessions_data_df.columns:
+                if col not in result.keys():
+                    result[col] = row[col]
+
+            results.append(result)
 
         return pd.DataFrame(results)
