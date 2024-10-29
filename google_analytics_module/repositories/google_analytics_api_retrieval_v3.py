@@ -91,3 +91,40 @@
 #             'ga:pageviews': 'page_views'
 #         })
 #         return data_df
+
+
+    # def get_data(self,
+    #             request_config: GoogleAnalyticsRequestConfig,
+    #             filter_clause: GoogleAnalyticsFilterClause,
+    #             property_id):
+    #     """get all data"""
+    #     results = []
+    #     page_token = filter_clause.page_dto.page_token
+
+    #     while True:
+    #         new_page_dto = PageDto(filter_clause.page_dto.page_size, page_token)
+    #         filter_clause.set_page_dto(new_page_dto)
+    #         response = self.google_analytics_repository.get_batch_data(property_id=property_id,
+    #                                     request_config=request_config,
+    #                                     filter_clause=filter_clause)
+    #         self.log.debug('request_config %s, date_range %s,\
+    #                                     page_dto %s, filter_clause %s, response %s',
+    #                                 request_config.to_dict(),
+    #                                 filter_clause.date_range.to_dict(),
+    #                                 filter_clause.page_dto.to_dict(),
+    #                                 filter_clause.to_dict(),
+    #                                 response)
+    #         results.extend(self.extract_data_from_response(
+    #             response, filter_clause.date_range))
+    #         page_token = response['reports'][0].get('nextPageToken')
+
+    #         total_rows = response.get('reports')[0].get(
+    #             'data').get('totals')[0]['values'][0]
+    #         self.log.debug(
+    #             "Retrieved %s of %s ", len(results), total_rows)
+
+    #         if page_token is None:
+    #             self.log.debug("All data has been retrieved")
+    #             break
+
+    #     return results

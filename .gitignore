@@ -8,3 +8,4 @@ settings/app_settings.json
 logs/
 settings/metadata.json
 settings/cu_dataset.pdf
+.venv/

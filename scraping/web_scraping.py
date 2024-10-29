@@ -4,26 +4,30 @@
 import re
 import logging
 import time
+import pandas as pd
 from datetime import datetime
 from threading import Semaphore, Thread
-from selenium.webdriver.support import expected_conditions as EC
-from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.common.by import By
 from selenium import webdriver
 from selenium.common.exceptions import TimeoutException as SeleniumTimeoutException
+from selenium.common.exceptions import NoSuchElementException
 from requests.utils import quote
 import backoff
 import requests
 from bs4 import BeautifulSoup
 from dtos.get_data_from_url_request_dto import GetDataFromUrlRequestDto
+from helpers.file_helper import FileHelper
 from helpers.settings_helper import SettingsHelper
-
+from helpers.string_helper import StringHelper
+from joblib import Parallel, delayed
 
 class WebScraping():
     """web scraping"""
     def __init__(self) -> None:
-        self.log = logging.getLogger(__name__)
+        self.log = logging.getLogger()
         self.settings_helper = SettingsHelper()
+        self.string_helper = StringHelper()
+        self.file_helper = FileHelper()
 
     def extract_value_replacing_prefix(self, text_array, prefix):
         '''
@@ -47,11 +51,12 @@ class WebScraping():
         return options
 
 
-    def on_backoff_handler(self, details):
+    def on_backoff_handler(self, details = None):
         '''
         Handler function when the backoff occurs. It simply logs the message
         '''
-        self.log.debug(details)
+        print("on_backoff_handler details ", details)
+        # self.log.debug(details)
         # web_scraping_logger.debug(
         #     f"Backing off {details.get('wait'):0.1f}
         #     seconds after {details.get('tries')}
@@ -63,6 +68,11 @@ class WebScraping():
         # it will raise Timeout exception, because the element by xpath is not available
     # So, gracefully handle such scenario
 
+    def find_element_by_xpath(self, driver, xpath):
+        try:
+            return driver.find_element(by=By.XPATH, value=xpath).text    
+        except NoSuchElementException as ex:
+            return ""
 
     @backoff.on_exception(backoff.expo,
                         SeleniumTimeoutException,
@@ -84,10 +94,13 @@ class WebScraping():
             driver.get(request_dto.url)
             text = ''
             while True:
-                rows = WebDriverWait(driver, 20).until(
-                    EC.visibility_of_all_elements_located((By.XPATH, request_dto.xpath)))
-                if len(rows) > 0:
-                    text = rows[0].text
+                text = self.find_element_by_xpath(driver, request_dto.content_xpath)
+                if not self.string_helper.is_null_or_whitespace(request_dto.no_content_xpath):
+                    no_content = self.find_element_by_xpath(driver, request_dto.no_content_xpath)
+                    
+                    if not self.string_helper.is_null_or_whitespace(no_content):
+                        return no_content
+
                 # wait some seconds before next try
                 sleep_timeout = default_wait_secs if \
                     request_dto.timeout_in_seconds > default_wait_secs \
@@ -100,12 +113,8 @@ class WebScraping():
                 # then simply ignore it, else there is possibility of infinite loop
                 difference_time = datetime.now() - start_time
                 if difference_time.total_seconds() > request_dto.timeout_in_seconds:
-                    print(f'Wait Timeout of {request_dto.timeout_in_seconds} seconds exceeded')
+                    self.log.info(f'Wait Timeout of {request_dto.timeout_in_seconds} seconds exceeded')
                     break
-
-        if text == '':
-            self.log.info('Couldnot retrieve data. So, return None')
-            return ''
 
         return text
 
@@ -150,16 +159,19 @@ class WebScraping():
         to_exclude = ['Results:1', '', 'Loading...']
         text = self.get_data_from_url(GetDataFromUrlRequestDto(
             url, is_headless, to_exclude,
-            timeout_in_seconds, '//*[@id="resultsPanel"]'))
-        if text == '':
-            return ''
-        text_array = text.splitlines()
+            timeout_in_seconds, '//*[@id="resultsPanel"]',
+            '//*[@id="noResults"]/calcite-tip/div/div'))
+        
+        council_name = ""
+        electoral_ward = ""
+        if text != '':
+            text_array = text.splitlines()
 
-        council_name = self.extract_value_replacing_prefix(text_array, "Council Name")
-        electoral_ward = self.extract_value_replacing_prefix(
-            text_array, "Electoral Ward")
+            council_name = self.extract_value_replacing_prefix(text_array, "Council Name")
+            electoral_ward = self.extract_value_replacing_prefix(
+                text_array, "Electoral Ward")
 
-        return {'address': address, 'council_name': council_name, 'electoral_ward': electoral_ward}
+        return {'address': address, 'council_name': council_name, 'electoral_ward': electoral_ward, 'text': text}
 
 
     def find_councils_by_addresses(self, addresses: list, is_headless=True, timeout_in_seconds=600):
@@ -215,7 +227,8 @@ class WebScraping():
             is_headless,
             [],
             timeout_in_seconds,
-            xpath))
+            xpath,
+            ""))
 
     # getting council name from sacommunity website based on xpath is not achievable,
     # because the xpath differs based on the contents
@@ -288,3 +301,78 @@ class WebScraping():
             thread.join()
 
         return all_address
+    
+    def scrape_council_name_based_on_cu_export_df(self,
+                                                  row_counter,
+                                                  total,
+                                                  row,
+                                                  output_records,
+                                                  output_file_path):
+        org_id = row["ID_19"]
+        address = str(row["Street_Address_Line_1"]) + " " + str(row["Suburb"])
+        council = row["Organisati_Council"]
+        electorate_state = row["Organisati_Electorate_State_"]
+        electorate_federal = row["Organisati_Electorate_Federal_"]
+
+        existing_record = [o for o in output_records if o.get("org_id") == org_id]
+        if len(existing_record) > 0:
+            self.log.info(f"Record exists: Skipping council for org {org_id}, address {address}. Progress {row_counter + 1} of {total}")
+            return None
+
+        print(f"Scraping council for org {org_id}, address {address}. Progress {row_counter + 1} of {total}")
+
+        error_message = ""
+        has_error = False
+        council_scraped = ""
+        electorate_state_scraped = ""
+        scraped_text = ""
+        if self.string_helper.is_null_or_whitespace(address):
+            error_message = "address is null or empty"
+        else:
+            address_cleaned = address.strip()
+            try:
+                council_by_address = self.find_council_by_address(address_cleaned)
+                council_scraped = council_by_address.get("council_name", "")
+                electorate_state_scraped = council_by_address.get("electoral_ward", "")
+                scraped_text = council_by_address.get("text", "")
+            except Exception as ex:
+                has_error = True
+                error_message = str(ex)
+                self.log.error(ex)
+
+        scraped_council = {
+            "org_id": org_id,
+            "address": address,
+            "council": council,
+            "electorate_state": electorate_state,
+            "electorate_federal": electorate_federal,
+            "error_message": error_message,
+            "has_error": has_error,
+            "council_scraped": council_scraped,
+            "electorate_state_scraped": electorate_state_scraped,
+            "is_council_correct": council == council_scraped,
+            "is_electorate_state_correct": electorate_state == electorate_state_scraped,
+            "scraped_text": scraped_text
+        }
+
+        if not self.string_helper.is_null_or_whitespace(output_file_path):
+            self.file_helper.write_jsonlines(output_file_path, scraped_council)
+
+    def scrape_council_names_based_on_cu_export_df(self,
+                                                   cu_export_df : pd.DataFrame,
+                                                   output_file_path: str = "",
+                                                   n_jobs=3):
+        total = len(cu_export_df)
+        output_records = []
+        if not self.string_helper.is_null_or_whitespace(output_file_path) and self.file_helper.does_file_exist(output_file_path):
+            self.log.info("Reading output records")
+            output_records = self.file_helper.read_jsonlines_all(output_file_path)
+            self.log.info("Completed reading output records")
+       
+        scraped_councils = Parallel(n_jobs=n_jobs)(delayed(self.scrape_council_name_based_on_cu_export_df)(row_counter,
+                                                  total,
+                                                  row,
+                                                  output_records,
+                                                  output_file_path) for row_counter,row in cu_export_df.iterrows())
+
+        return [s for s in scraped_councils if s is not None]

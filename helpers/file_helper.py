@@ -3,14 +3,17 @@ import os
 import shutil
 from datetime import date
 import pandas as pd
+import jsonlines
 
 from helpers.enums import DataModule
 from helpers.settings_helper import SettingsHelper
+from helpers.string_helper import StringHelper
 
 class FileHelper():
     """helper methods for file handling"""
     def __init__(self) -> None:
         self.settings_helper = SettingsHelper()
+        self.string_helper = StringHelper()
 
     def create_directory(self, dir_path: str):
         """create directory"""
@@ -80,3 +83,50 @@ class FileHelper():
         """read run file"""
         file_path = self.get_run_file_path(run_id, module)
         return pd.read_csv(file_path)
+    
+    def write_jsonlines(self, file_path: str, data_obj):
+        """
+            Append json to jsonl
+        """
+        self.make_directories_from_file_path(file_path)
+        with jsonlines.open(file_path, "a") as writer:
+            writer.write(data_obj)
+
+    def read_jsonlines(self, file_path: str):
+        """
+            Read from jsonlines file
+        """
+
+        with jsonlines.open(file_path) as reader:
+            for obj in reader:
+                yield obj
+
+    def read_jsonlines_all(self, file_path: str):
+        """
+            Read from jsonlines without yield
+        """
+        lines = []
+        for line in self.read_jsonlines(file_path):
+            lines.append(line)
+
+        return lines
+
+    def extract_directory_path(self, file_path: str):
+        """
+        Extract directory path from the full file path
+        """
+        self.validate_file_path(file_path)
+        return os.path.dirname(file_path)
+    
+    def make_directories(self, dir_path: str):
+        os.makedirs(dir_path, exist_ok=True)
+
+    def make_directories_from_file_path(self, file_path: str):
+        self.make_directories(self.extract_directory_path(file_path))
+
+    def validate_file_path(self, file_path: str):
+        if self.string_helper.is_null_or_whitespace(file_path):
+            raise ValueError("File path is null or empty")
+        
+    def does_file_exist(self, file_path: str):
+        return os.path.exists(file_path)

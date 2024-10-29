@@ -29,12 +29,6 @@ class DataModule(Enum):
     LANDING_PAGE_CLEANED = 6
     LANGING_PAGE_ERRORS = 7
 
-class GoogleAuthenticationMethod(Enum):
-    """Authentication methods"""
-    DEFAULT = 0
-    OAUTH = 1
-    SERVICE_ACCOUNT = 2
-
 class GoogleApiVersion(Enum):
     """Api Version"""
     DEFAULT = 0

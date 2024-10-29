@@ -6,6 +6,6 @@ Sessions by Device Category,4,customEvent:DatasetID,sessions
 Sessions by Source Medium,3,"ga:customVarValue1, ga:sourceMedium", ga:sessions
 Sessions by Source Medium,4,customEvent:DatasetID,sessions
 Sessions by Age,3,"ga:customVarValue1, ga:userAgeBracket", ga:sessions
-Sessions by Age,4,customEvent:DatasetID,sessions
+Sessions by Age,4,"customEvent:DatasetID,userAgeBracket",sessions
 Sessions by Gender,3,"ga:customVarValue1, ga:userGender",ga:sessions
 Sessions by Gender,4,customEvent:DatasetID,sessions

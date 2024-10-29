@@ -9,12 +9,14 @@ class GetDataFromUrlRequestDto():
                  is_headless: bool,
                  to_exclude: list,
                  timeout_in_seconds: int,
-                 xpath: str) -> None:
+                 content_xpath: str,
+                 no_content_xpath: str) -> None:
         self.url = url
         self.is_headless = is_headless
         self.to_exclude = to_exclude
         self.timeout_in_seconds = timeout_in_seconds
-        self.xpath = xpath
+        self.content_xpath = content_xpath
+        self.no_content_xpath = no_content_xpath
 
     # pylint: enable=too-many-arguments
 
