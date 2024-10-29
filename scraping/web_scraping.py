@@ -161,13 +161,15 @@ class WebScraping():
             url, is_headless, to_exclude,
             timeout_in_seconds, '//*[@id="resultsPanel"]',
             '//*[@id="noResults"]/calcite-tip/div/div'))
-        if text == '':
-            return ''
-        text_array = text.splitlines()
+        
+        council_name = ""
+        electoral_ward = ""
+        if text != '':
+            text_array = text.splitlines()
 
-        council_name = self.extract_value_replacing_prefix(text_array, "Council Name")
-        electoral_ward = self.extract_value_replacing_prefix(
-            text_array, "Electoral Ward")
+            council_name = self.extract_value_replacing_prefix(text_array, "Council Name")
+            electoral_ward = self.extract_value_replacing_prefix(
+                text_array, "Electoral Ward")
 
         return {'address': address, 'council_name': council_name, 'electoral_ward': electoral_ward, 'text': text}
 
@@ -314,10 +316,10 @@ class WebScraping():
 
         existing_record = [o for o in output_records if o.get("org_id") == org_id]
         if len(existing_record) > 0:
-            self.log.info(self.log.info(f"Record exists: Skipping council for org {org_id}, address {address}. Progress {row_counter + 1} of {total}"))
+            self.log.info(f"Record exists: Skipping council for org {org_id}, address {address}. Progress {row_counter + 1} of {total}")
             return None
 
-        self.log.info(f"Scraping council for org {org_id}, address {address}. Progress {row_counter + 1} of {total}")
+        print(f"Scraping council for org {org_id}, address {address}. Progress {row_counter + 1} of {total}")
 
         error_message = ""
         has_error = False
@@ -326,10 +328,8 @@ class WebScraping():
         scraped_text = ""
         if self.string_helper.is_null_or_whitespace(address):
             error_message = "address is null or empty"
-            has_error = True
         else:
             address_cleaned = address.strip()
-            
             try:
                 council_by_address = self.find_council_by_address(address_cleaned)
                 council_scraped = council_by_address.get("council_name", "")
@@ -360,16 +360,16 @@ class WebScraping():
 
     def scrape_council_names_based_on_cu_export_df(self,
                                                    cu_export_df : pd.DataFrame,
-                                                   output_file_path: str = ""):
+                                                   output_file_path: str = "",
+                                                   n_jobs=3):
         total = len(cu_export_df)
-        # scraped_councils = []
         output_records = []
         if not self.string_helper.is_null_or_whitespace(output_file_path) and self.file_helper.does_file_exist(output_file_path):
             self.log.info("Reading output records")
             output_records = self.file_helper.read_jsonlines_all(output_file_path)
             self.log.info("Completed reading output records")
        
-        scraped_councils = Parallel(n_jobs=5)(delayed(self.scrape_council_name_based_on_cu_export_df)(row_counter,
+        scraped_councils = Parallel(n_jobs=n_jobs)(delayed(self.scrape_council_name_based_on_cu_export_df)(row_counter,
                                                   total,
                                                   row,
                                                   output_records,
