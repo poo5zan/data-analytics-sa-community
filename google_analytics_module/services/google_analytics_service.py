@@ -1,4 +1,5 @@
 from datetime import date
+from joblib import Parallel, delayed
 import pandas as pd
 from dtos.date_range_dto import DateRangeDto
 from google_analytics_module.dtos.google_analytics_filter_clause_dto import (
@@ -92,15 +93,39 @@ class GoogleAnalyticsService:
         )
         results_df = pd.DataFrame(results)
         return self.pandas_helper.convert_data_types(results_df)
-    
-    def get_sessions_by_organisation_id(self,
-                                        start_date: date,
-                                        end_date: date,
-                                        organisation_id: str):
-        sessions = self.get_sessions_by_landing_page("", start_date, end_date, organisation_id)
-        sessions_count = 0 if len(sessions) == 0 else sum([int(s.get("sessions")) for s in sessions])
-        
-        return {"organisation_id":organisation_id, "sessions_count": sessions_count}
+
+    def get_sessions_by_organisation_id(
+        self, start_date: date, end_date: date, organisation_id: str, row_count = None, total_count = None, debug = False
+    ):
+        if row_count and total_count and debug:
+            print(f"get_sessions_by_landing_page row_count {row_count} of {total_count}. organisation_id: {organisation_id}")
+        sessions = self.get_sessions_by_landing_page(
+            "", start_date, end_date, organisation_id
+        )
+        sessions_count = (
+            0 if len(sessions) == 0 else sum([int(s.get("sessions")) for s in sessions])
+        )
+
+        return {"organisation_id": organisation_id, "sessions_count": sessions_count}
+
+    def get_sessions_by_organisation_ids(
+        self, start_date: date, end_date: date, organisation_ids: list[str], n_jobs=5, debug=False
+    ):
+        total_count = len(organisation_ids)
+        return Parallel(n_jobs=n_jobs)(
+            delayed(self.get_sessions_by_organisation_id)(
+                start_date, end_date, organisation_id, row_count, total_count, debug
+            )
+            for row_count, organisation_id in enumerate(organisation_ids)
+        )
+
+    def get_sessions_by_organisation_ids_as_df(
+        self, start_date: date, end_date: date, organisation_ids: list[str], n_jobs=5, debug=False
+    ):
+        sessions = self.get_sessions_by_organisation_ids(
+            start_date, end_date, organisation_ids, n_jobs, debug
+        )
+        return pd.DataFrame(sessions)
 
     def get_sessions_by_age(self, dataset_id: str, start_date: date, end_date: date):
         """get sessions data by age"""
