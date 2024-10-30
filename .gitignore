@@ -9,3 +9,4 @@ logs/
 settings/metadata.json
 settings/cu_dataset.pdf
 .venv/
+.env

@@ -13,6 +13,7 @@ class GoogleAnalyticsFilterClause():
         self.page_dto: PageDto = None
         self.council_name = ''
         self.api_version = GoogleApiVersion.DEFAULT
+        self.organisation_id = ""
 
     def set_dataset_id(self, dataset_id: str):
         """set dataset id"""
@@ -33,6 +34,10 @@ class GoogleAnalyticsFilterClause():
     def set_api_version(self, api_version: GoogleApiVersion):
         """set api version"""
         self.api_version = api_version
+
+    def set_organisation_id(self, organisation_id: str):
+        """Filters by organisation id"""
+        self.organisation_id = organisation_id
 
     def to_dict(self):
         """returns dictionary representation of dto"""
