@@ -20,6 +20,7 @@ from playwright.sync_api import sync_playwright
 from playwright.async_api import async_playwright
 from scraping.html_helper import HtmlHelper
 from scraping.scraping_response import ScrapingResponse
+from selenium.common.exceptions import WebDriverException
 
 
 class WebScraping:
@@ -116,9 +117,7 @@ class WebScraping:
         self.validate_url(url)
         try:
             self.logger.info(f"scrape_url: {url}")
-            headers = {
-                'User-Agent': self.USER_AGENT
-            }
+            headers = {"User-Agent": self.USER_AGENT}
             response = requests.get(url, headers=headers)
             error_name, error_message = self.get_errors(response.status_code)
             return ScrapingResponse(
@@ -196,13 +195,55 @@ class WebScraping:
                 error_message=str(ex),
             )
 
-    def scrape_url(self, url) -> ScrapingResponse:
-        response = self.scrape_url_using_requests(url)
-        if response.response_code != HTTPStatus.OK.value:
-            response = self.scrape_url_using_playwright(url)
+    def scrape_url_using_selenium(self, url: str, time_to_wait=5):
+        """scrape url and returns html"""
+        self.validate_url(url)
 
+        page_source = ""
+        response_code = None
+        error_message = ""
+        error_name = ""
+        try:
+            with webdriver.Chrome(options=self.get_chrome_options(True)) as driver:
+                driver.implicitly_wait(time_to_wait)
+                driver.get(url)
+                page_source = driver.page_source
+                response_code = HTTPStatus.OK.value
+        except WebDriverException as wde:
+            self.logger.error("scrape_url WebDriverException %s", wde)
+            error_name = "WebDriverException"
+            if "ERR_NAME_NOT_RESOLVED" in wde.msg:
+                response_code = HTTPStatus.NOT_FOUND.value
+                error_message = HTTPStatus.NOT_FOUND.description
+            else:
+                response_code = HTTPStatus.INTERNAL_SERVER_ERROR.value
+                error_message = str(wde)
+
+        except Exception as ex:
+            error_name = "Exception"
+            response_code = HTTPStatus.INTERNAL_SERVER_ERROR.value
+            error_message = str(ex)
+            self.logger.error("scrape_url Exception %s", ex)
+
+        return ScrapingResponse(
+            url=url,
+            response_code=response_code,
+            page_content=page_source,
+            error_name=error_name,
+            error_message=error_message,
+        )
+
+    def scrape_url(self, url) -> ScrapingResponse:
+        self.validate_url(url)
+        scraper_options = [self.scrape_url_using_requests, self.scrape_url_using_playwright, self.scrape_url_using_selenium]
+        for scraper in scraper_options:
+            response = scraper(url)
+            if response.response_code == HTTPStatus.OK.value:
+                return response
+            
+        # return the last response
         return response
-    
+
     async def scrape_url_async(self, url: str) -> ScrapingResponse:
         response = self.scrape_url_using_requests(url)
         if response.response_code != HTTPStatus.OK.value:
