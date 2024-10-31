@@ -3,8 +3,11 @@ import os
 # insert current path to system path, so that we can import python file
 sys.path.insert(1, os.getcwd())
 from scraping.url_checker import UrlChecker
-
+import pandas as pd
 
 url_checker = UrlChecker()
-resp = url_checker.check_urls_status("https://sacommunity.org/node/1123")
-p = 0
+url = "https://sacommunity.org/node/1123"
+resp = url_checker.check_urls_status(url)
+responses = [r.__dict__ for r in resp]
+resp_df = pd.DataFrame(responses)
+resp_df.to_csv("./data/url_checker.csv", index=False, escapechar="\\")
