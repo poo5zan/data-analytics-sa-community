@@ -21,6 +21,8 @@ from helpers.settings_helper import SettingsHelper
 from helpers.string_helper import StringHelper
 from joblib import Parallel, delayed
 
+from scraping.find_council_by_address_response import FindCouncilByAddressResponse
+
 class WebScraping():
     """web scraping"""
     def __init__(self) -> None:
@@ -139,7 +141,7 @@ class WebScraping():
     #             return None
 
 
-    def find_council_by_address(self, address:str, timeout_in_seconds=600, is_headless=True):
+    def find_council_by_address(self, address:str, timeout_in_seconds=600, is_headless=True) -> FindCouncilByAddressResponse:
         '''
         Finds council by address
         address: address where organization is located
@@ -151,27 +153,35 @@ class WebScraping():
         if address is None or address == '':
             raise ValueError('address is required')
 
-        address_encoded = quote(address)
-        app_id = 'db6cce7b773746b4a1d4ce544435f9da'
-        base_url = 'https://lga-sa.maps.arcgis.com/apps/instant/lookup/index.html'
-        url = f'{base_url}?appid={app_id}&find={address_encoded}'
-        self.log.info('Fetching council for %s', address)
-        to_exclude = ['Results:1', '', 'Loading...']
-        text = self.get_data_from_url(GetDataFromUrlRequestDto(
-            url, is_headless, to_exclude,
-            timeout_in_seconds, '//*[@id="resultsPanel"]',
-            '//*[@id="noResults"]/calcite-tip/div/div'))
-        
-        council_name = ""
-        electoral_ward = ""
-        if text != '':
-            text_array = text.splitlines()
+        error_message = ""
+        has_error = False
+        try:
+            address_encoded = quote(address)
+            app_id = 'db6cce7b773746b4a1d4ce544435f9da'
+            base_url = 'https://lga-sa.maps.arcgis.com/apps/instant/lookup/index.html'
+            url = f'{base_url}?appid={app_id}&find={address_encoded}'
+            self.log.info('Fetching council for %s', address)
+            to_exclude = ['Results:1', '', 'Loading...']
+            text = self.get_data_from_url(GetDataFromUrlRequestDto(
+                url, is_headless, to_exclude,
+                timeout_in_seconds, '//*[@id="resultsPanel"]',
+                '//*[@id="noResults"]/calcite-tip/div/div'))
+            
+            council_name = ""
+            electoral_ward = ""
+            if text != '':
+                text_array = text.splitlines()
 
-            council_name = self.extract_value_replacing_prefix(text_array, "Council Name")
-            electoral_ward = self.extract_value_replacing_prefix(
-                text_array, "Electoral Ward")
+                council_name = self.extract_value_replacing_prefix(text_array, "Council Name")
+                electoral_ward = self.extract_value_replacing_prefix(
+                    text_array, "Electoral Ward")
+                
+        except Exception as ex:
+            has_error = True
+            error_message = str(ex)
+            self.log.error("find_council_by_address", ex)
 
-        return {'address': address, 'council_name': council_name, 'electoral_ward': electoral_ward, 'text': text}
+        return FindCouncilByAddressResponse(address, council_name, electoral_ward, text, has_error, error_message)
 
 
     def find_councils_by_addresses(self, addresses: list, is_headless=True, timeout_in_seconds=600):
@@ -315,31 +325,20 @@ class WebScraping():
         electorate_federal = row["Organisati_Electorate_Federal_"]
 
         existing_record = org_id in output_records
-        if existing_record > 0:
+        if existing_record:
             print(f"Record exists: Skipping council for org {org_id}, address {address}. Progress {row_counter + 1} of {total}")
             return None
 
         print(f"Scraping council for org {org_id}, address {address}. Progress {row_counter + 1} of {total}")
-
+       
         error_message = ""
-        has_error = False
-        council_scraped = ""
-        electorate_state_scraped = ""
-        scraped_text = ""
         if self.string_helper.is_null_or_whitespace(address):
             error_message = "address is null or empty"
         else:
             address_cleaned = address.strip()
-            try:
-                council_by_address = self.find_council_by_address(address_cleaned)
-                council_scraped = council_by_address.get("council_name", "")
-                electorate_state_scraped = council_by_address.get("electoral_ward", "")
-                scraped_text = council_by_address.get("text", "")
-            except Exception as ex:
-                has_error = True
-                error_message = str(ex)
-                self.log.error(ex)
-
+            council_by_address_response = self.find_council_by_address(address_cleaned)
+            error_message = council_by_address_response.error_message
+            
         scraped_council = {
             "org_id": org_id,
             "address": address,
@@ -347,12 +346,11 @@ class WebScraping():
             "electorate_state": electorate_state,
             "electorate_federal": electorate_federal,
             "error_message": error_message,
-            "has_error": has_error,
-            "council_scraped": council_scraped,
-            "electorate_state_scraped": electorate_state_scraped,
-            "is_council_correct": council == council_scraped,
-            "is_electorate_state_correct": electorate_state == electorate_state_scraped,
-            "scraped_text": scraped_text
+            "has_error": council_by_address_response.has_error,
+            "council_scraped": council_by_address_response.council_name,
+            "electorate_state_scraped": council_by_address_response.electoral_ward,
+            "is_council_correct": council == council_by_address_response.council_name,
+            "scraped_text": council_by_address_response.text
         }
 
         if not self.string_helper.is_null_or_whitespace(output_file_path):
@@ -380,3 +378,40 @@ class WebScraping():
                                                   output_file_path) for row_counter,row in cu_export_df.iterrows())
 
         return [s for s in scraped_councils if s is not None]
+    
+    def do_council_scraping_output_require_retry(self, output):
+        # No Results found
+        if output.get("scraped_text").startswith("No results found."):
+            return True
+
+        # Exceptions
+        if output.get("has_error", False) and not self.string_helper.is_null_or_whitespace(output.get("address")):
+            return True
+        
+        return False
+
+    def retry_failed_scraping_of_council_name(self, output_record, new_output_file_path: str, existing_records, row_counter, total):
+        existing_record = output_record.get("org_id") in existing_records
+        if existing_record:
+            return
+        
+        if self.do_council_scraping_output_require_retry(output_record):
+            print(f'Scraping council for org {output_record.get("org_id")}, address {output_record.get("address")}. Progress {row_counter + 1} of {total}')
+            response = self.find_council_by_address(output_record.get("address"))
+            output_record["error_message"] = response.error_message
+            output_record["has_error"] = response.has_error
+            output_record["council_scraped"] = response.council_name
+            output_record["electorate_state_scraped"] = response.electoral_ward
+            output_record["is_council_correct"] = output_record["council"] == response.council_name    
+            output_record["scraped_text"] = response.text
+ 
+        self.file_helper.write_jsonlines(new_output_file_path, output_record)
+
+    def retry_failed_scraping_of_council_names(self, output_file_path: str, new_output_file_path: str, n_jobs=3):
+        output_records = self.file_helper.read_jsonlines_all(output_file_path)
+
+        total = len(output_records)
+        existing_records = []
+        if self.file_helper.does_file_exist(new_output_file_path):
+            existing_records = self.get_output_records_organisations(new_output_file_path)
+        Parallel(n_jobs=n_jobs)(delayed(self.retry_failed_scraping_of_council_name)(output_record, new_output_file_path, existing_records, row_counter, total) for row_counter, output_record in enumerate(output_records))
