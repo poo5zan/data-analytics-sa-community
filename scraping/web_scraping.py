@@ -1,112 +1,94 @@
-'''
-    Web scraping
-'''
-import re
+"""
+Web scraping
+"""
+
 import logging
 import time
-import pandas as pd
 from datetime import datetime
-from threading import Semaphore, Thread
 from selenium.webdriver.common.by import By
 from selenium import webdriver
 from selenium.common.exceptions import TimeoutException as SeleniumTimeoutException
 from selenium.common.exceptions import NoSuchElementException
-from requests.utils import quote
 import backoff
 import requests
-from bs4 import BeautifulSoup
 from dtos.get_data_from_url_request_dto import GetDataFromUrlRequestDto
 from helpers.file_helper import FileHelper
 from helpers.settings_helper import SettingsHelper
 from helpers.string_helper import StringHelper
-from joblib import Parallel, delayed
+from http import HTTPStatus
+from playwright.sync_api import sync_playwright
+from scraping.html_helper import HtmlHelper
+from scraping.scraping_response import ScrapingResponse
 
-from scraping.find_council_by_address_response import FindCouncilByAddressResponse
 
-class WebScraping():
-    """web scraping"""
+class WebScraping:
+    """web scraping methods"""
+
     def __init__(self) -> None:
-        self.log = logging.getLogger()
+        self.logger = logging.getLogger()
         self.settings_helper = SettingsHelper()
         self.string_helper = StringHelper()
         self.file_helper = FileHelper()
+        self.html_helper = HtmlHelper()
+        self.USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0.0.0 Safari/537.36"
 
-    def extract_value_replacing_prefix(self, text_array, prefix):
-        '''
-        Extract only the value by removing the prefix
-        '''
-        values = [t for t in text_array if t.startswith(prefix)]
-        if len(values) > 0:
-            return values[0].replace(prefix, '').strip()
+    def validate_url(self, url):
+        if self.string_helper.is_null_or_whitespace(url):
+            raise ValueError("url is required")
 
-        return ''
-
+        if not self.html_helper.is_valid_url(url):
+            raise ValueError(f"Invalid url {url}")
 
     def get_chrome_options(self, is_headless):
-        '''
+        """
         Get all the chrome options required for selenium
-        '''
+        """
         options = webdriver.ChromeOptions()
         if is_headless:
             options.add_argument("--headless=new")
 
         return options
 
-
-    def on_backoff_handler(self, details = None):
-        '''
-        Handler function when the backoff occurs. It simply logs the message
-        '''
-        print("on_backoff_handler details ", details)
-        # self.log.debug(details)
-        # web_scraping_logger.debug(
-        #     f"Backing off {details.get('wait'):0.1f}
-        #     seconds after {details.get('tries')}
-        #     tries calling function {details.get('target')} with args {details.get('args')}
-        #     and kwargs {details.get('kwargs')}")
-
-    # backoff reference: https://pypi.org/project/backoff/
-    # TODO, if the url is no longer valid, and the page redirects,
-        # it will raise Timeout exception, because the element by xpath is not available
-    # So, gracefully handle such scenario
-
     def find_element_by_xpath(self, driver, xpath):
         try:
-            return driver.find_element(by=By.XPATH, value=xpath).text    
+            return driver.find_element(by=By.XPATH, value=xpath).text
         except NoSuchElementException as ex:
+            self.logger.warning("find_element_by_xpath %s", ex)
             return ""
 
-    @backoff.on_exception(backoff.expo,
-                        SeleniumTimeoutException,
-                        max_tries=3,
-                        on_backoff=on_backoff_handler)
-    def get_data_from_url(self, request_dto : GetDataFromUrlRequestDto):
-        '''
+    @backoff.on_exception(backoff.expo, SeleniumTimeoutException, max_tries=3)
+    def get_data_from_url(self, request_dto: GetDataFromUrlRequestDto):
+        """
         Get data from url. This is especially for javascript enabled websites.
         If we need data from static websites, simply use requests.get()
-        '''
-        if request_dto.url is None or request_dto.url == '':
-            raise ValueError('url is required')
+        """
+        self.validate_url(request_dto.url)
         start_time = datetime.now()
         default_wait_secs = 5
 
         options = self.get_chrome_options(request_dto.is_headless)
         with webdriver.Chrome(options=options) as driver:
-            self.log.info('Fetching data from url %s', request_dto.url)
+            self.logger.info("Fetching data from url %s", request_dto.url)
             driver.get(request_dto.url)
-            text = ''
+            text = ""
             while True:
                 text = self.find_element_by_xpath(driver, request_dto.content_xpath)
-                if not self.string_helper.is_null_or_whitespace(request_dto.no_content_xpath):
-                    no_content = self.find_element_by_xpath(driver, request_dto.no_content_xpath)
-                    
+                if not self.string_helper.is_null_or_whitespace(
+                    request_dto.no_content_xpath
+                ):
+                    no_content = self.find_element_by_xpath(
+                        driver, request_dto.no_content_xpath
+                    )
+
                     if not self.string_helper.is_null_or_whitespace(no_content):
                         return no_content
 
                 # wait some seconds before next try
-                sleep_timeout = default_wait_secs if \
-                    request_dto.timeout_in_seconds > default_wait_secs \
+                sleep_timeout = (
+                    default_wait_secs
+                    if request_dto.timeout_in_seconds > default_wait_secs
                     else request_dto.timeout_in_seconds
+                )
                 time.sleep(sleep_timeout)
                 if text not in request_dto.to_exclude:
                     break
@@ -115,303 +97,75 @@ class WebScraping():
                 # then simply ignore it, else there is possibility of infinite loop
                 difference_time = datetime.now() - start_time
                 if difference_time.total_seconds() > request_dto.timeout_in_seconds:
-                    self.log.info(f'Wait Timeout of {request_dto.timeout_in_seconds} seconds exceeded')
+                    self.logger.info(
+                        f"Wait Timeout of {request_dto.timeout_in_seconds} seconds exceeded"
+                    )
                     break
 
         return text
 
-    # Manual retry logic. I ended up using backoff library instead. Kept here just for reference
-    # def get_data_from_url_with_retry(url: str, is_headless:
-    #                       bool, to_exclude: list,
-    #                       timeout_in_seconds: int,
-    #                       xpath: str):
-    #     MAX_RETRY_COUNT = 3
-
-    #     for i in range(MAX_RETRY_COUNT):
-    #         try:
-    #             return get_data_from_url(url, is_headless, to_exclude, timeout_in_seconds, xpath)
-    #         except SeleniumTimeoutException as te:
-    #             print('Timeout occurred ', str(te))
-    #             # TODO, wait for some time and try again
-    #             print('Wait 3 seconds before retry. Retry count ', i)
-    #             time.sleep(3)
-    #         except Exception as ex:
-    #             print('General Exception ', str(ex))
-    #             print('Exception type ', type(ex))
-    #             return None
-
-
-    def find_council_by_address(self, address:str, timeout_in_seconds=600, is_headless=True) -> FindCouncilByAddressResponse:
-        '''
-        Finds council by address
-        address: address where organization is located
-        timeout_in_seconds: timeout in seconds until which the program will 
-        wait before returning None
-        is_headless: if False, a chrome browser will popup, 
-        else the operation will be done in background
-        '''
-        if address is None or address == '':
-            raise ValueError('address is required')
-
-        error_message = ""
-        has_error = False
-        try:
-            address_encoded = quote(address)
-            app_id = 'db6cce7b773746b4a1d4ce544435f9da'
-            base_url = 'https://lga-sa.maps.arcgis.com/apps/instant/lookup/index.html'
-            url = f'{base_url}?appid={app_id}&find={address_encoded}'
-            self.log.info('Fetching council for %s', address)
-            to_exclude = ['Results:1', '', 'Loading...']
-            text = self.get_data_from_url(GetDataFromUrlRequestDto(
-                url, is_headless, to_exclude,
-                timeout_in_seconds, '//*[@id="resultsPanel"]',
-                '//*[@id="noResults"]/calcite-tip/div/div'))
-            
-            council_name = ""
-            electoral_ward = ""
-            if text != '':
-                text_array = text.splitlines()
-
-                council_name = self.extract_value_replacing_prefix(text_array, "Council Name")
-                electoral_ward = self.extract_value_replacing_prefix(
-                    text_array, "Electoral Ward")
-                
-        except Exception as ex:
-            has_error = True
-            error_message = str(ex)
-            self.log.error("find_council_by_address", ex)
-
-        return FindCouncilByAddressResponse(address, council_name, electoral_ward, text, has_error, error_message)
-
-
-    def find_councils_by_addresses(self, addresses: list, is_headless=True, timeout_in_seconds=600):
-        '''
-        Find councils by addresses in parallel
-        Example: 
-        # with less timeout, to check test timeout feature. 
-        # Without timeout, there is possibility of infinite loop
-        # print(find_council_by_address("130 L'Estrange Street, Glenunga", 2))
-
-        # with default timeout, this generally gives data
-        # print('council details ', find_council_by_address("130 L'Estrange Street, Glenunga"))
-        '''
-        # maximum number of concurrent requests at a time
-        semaphore = Semaphore(self.settings_helper.get_web_scraping_maximum_concurrent_requests())
-
-        threads = []
-
-        def find_council(address, all_councils):
-            with semaphore:
-                try:
-                    council = self.find_council_by_address(
-                        address, timeout_in_seconds, is_headless)
-                    all_councils.append(council)
-                except Exception as ex:
-                    # simply log the exception, don't raise it further
-                    self.log.error(ex, exc_info=True)
-                    raise ex
-
-        all_councils = []
-        for address in addresses:
-            thread = Thread(target=find_council, args=(address, all_councils))
-            threads.append(thread)
-            thread.start()
-
-        # print('Wait for all threads to complete ')
-        for thread in threads:
-            thread.join()
-
-        return all_councils
-
-
-    def find_address_from_sacommunity_website(self,
-                                              url: str,
-                                              is_headless=True,
-                                              timeout_in_seconds=600):
-        '''
-        Find address from sa community website
-        '''
-        xpath = '//*[@id="content-area"]/div/div[1]/div[2]/div[2]/div/div[1]/div[1]/div[2]'
-        return self.get_data_from_url(GetDataFromUrlRequestDto(
-            url,
-            is_headless,
-            [],
-            timeout_in_seconds,
-            xpath,
-            ""))
-
-    # getting council name from sacommunity website based on xpath is not achievable,
-    # because the xpath differs based on the contents
-    # As the time of this writing, this urls
-    # https://sacommunity.org/org/208832-Burnside_Youth_Club and
-    # https://sacommunity.org/org/196519-Sturt_Badminton_Club_Inc. has xpath of
-    # //*[@id="content-area"]/div/div[4]
-    # //*[@id="content-area"]/div/div[5]
-    # So it's okay for now to get the council name based on regular expression,
-    # thus used beautiful soup
-
-
-    def get_council_from_sacommunity_website(self, url):
-        '''
-        Get council from sacommunity website
-        '''
-        timeout = self.settings_helper.get_web_scraping_timeout_in_seconds()
-        url_response = requests.get(url,
-                                    timeout=timeout)
-        soup = BeautifulSoup(url_response.content)
-        council_identifier = "Council:"
-        council_text = soup.find("div", string=re.compile(council_identifier))
-        # print('council text ', council_text)
-        council_name = ''
-        if council_text is not None:
-            council_text = str(council_text)
-            start_index = council_text.index(council_identifier)
-            council_name = council_text[start_index:].replace(
-                council_identifier, '').replace("</div>", "").strip()
-
-        return council_name
-
-
-    # test function, useful while debugging
-    # url = 'https://sacommunity.org/org/208832-Burnside_Youth_Club'
-    # find_address_in_sacommunity(url, False)
-
-
-    def find_addresses_from_sacommunity_website(self,
-                                                urls: list,
-                                                is_headless=True,
-                                                timeout_in_seconds=600):
-        '''
-        Retrieves addresses from the sa-community website for given lists of urls in parallel
-        '''
-        semaphore = Semaphore(self.settings_helper.get_web_scraping_maximum_concurrent_requests())
-
-        threads = []
-
-        def find_addr(url, all_address):
-            with semaphore:
-                try:
-                    addr = self.find_address_from_sacommunity_website(
-                        url, is_headless, timeout_in_seconds)
-                    council = self.get_council_from_sacommunity_website(url)
-                    all_address.append(
-                        {'url': url, 'address': addr, 'council_in_sacommunity_website': council})
-                except Exception as ex:
-                    self.log.error(ex, exc_info=True)
-                    raise ex
-
-        all_address = []
-        for url in urls:
-            thread = Thread(target=find_addr, args=(url, all_address))
-            threads.append(thread)
-            thread.start()
-
-        # print('Wait for all threads to complete ')
-        for thread in threads:
-            thread.join()
-
-        return all_address
-    
-    def scrape_council_name_based_on_cu_export_df(self,
-                                                  row_counter,
-                                                  total,
-                                                  row,
-                                                  output_records,
-                                                  output_file_path):
-        org_id = row["ID_19"]
-        address = str(row["Street_Address_Line_1"]) + " " + str(row["Suburb"])
-        council = row["Organisati_Council"]
-        electorate_state = row["Organisati_Electorate_State_"]
-        electorate_federal = row["Organisati_Electorate_Federal_"]
-
-        existing_record = org_id in output_records
-        if existing_record:
-            print(f"Record exists: Skipping council for org {org_id}, address {address}. Progress {row_counter + 1} of {total}")
-            return None
-
-        print(f"Scraping council for org {org_id}, address {address}. Progress {row_counter + 1} of {total}")
-       
-        error_message = ""
-        if self.string_helper.is_null_or_whitespace(address):
-            error_message = "address is null or empty"
+    def get_errors(self, status_code: int):
+        if status_code != HTTPStatus.OK.value:
+            http_status = HTTPStatus(status_code)
+            return http_status.name, http_status.description
         else:
-            address_cleaned = address.strip()
-            council_by_address_response = self.find_council_by_address(address_cleaned)
-            error_message = council_by_address_response.error_message
-            
-        scraped_council = {
-            "org_id": org_id,
-            "address": address,
-            "council": council,
-            "electorate_state": electorate_state,
-            "electorate_federal": electorate_federal,
-            "error_message": error_message,
-            "has_error": council_by_address_response.has_error,
-            "council_scraped": council_by_address_response.council_name,
-            "electorate_state_scraped": council_by_address_response.electoral_ward,
-            "is_council_correct": council == council_by_address_response.council_name,
-            "scraped_text": council_by_address_response.text
-        }
+            return "", ""
 
-        if not self.string_helper.is_null_or_whitespace(output_file_path):
-            self.file_helper.write_jsonlines(output_file_path, scraped_council)
+    def scrape_url_using_requests(self, url: str) -> ScrapingResponse:
+        self.validate_url(url)
+        try:
+            self.logger.info(f"scrape_url: {url}")
+            response = requests.get(url)
+            error_name, error_message = self.get_errors(response.status_code)
+            return ScrapingResponse(
+                url=url,
+                response_code=response.status_code,
+                page_content=response.text,
+                error_name=error_name,
+                error_message=error_message,
+            )
+        except Exception as ex:
+            self.logger.error("scrape_url %s", ex)
+            return ScrapingResponse(
+                url=url,
+                response_code=HTTPStatus.INTERNAL_SERVER_ERROR.value,
+                page_content="",
+                error_name="Exception",
+                error_message=str(ex),
+            )
 
-    def get_output_records_organisations(self, output_file_path):
-        output_records = self.file_helper.read_jsonlines_all(output_file_path)
-        return [o.get('org_id') for o in output_records]
+    def scrape_url_using_playwright(self, url: str) -> ScrapingResponse:
+        """
+        Retrieves html of a webpage using Playwright
+        """
+        self.validate_url(url)
 
-    def scrape_council_names_based_on_cu_export_df(self,
-                                                   cu_export_df : pd.DataFrame,
-                                                   output_file_path: str = "",
-                                                   n_jobs=3):
-        total = len(cu_export_df)
-        output_records = []
-        if not self.string_helper.is_null_or_whitespace(output_file_path) and self.file_helper.does_file_exist(output_file_path):
-            self.log.info("Reading output records")
-            output_records = self.get_output_records_organisations(output_file_path)
-            self.log.info("Completed reading output records")
-       
-        scraped_councils = Parallel(n_jobs=n_jobs)(delayed(self.scrape_council_name_based_on_cu_export_df)(row_counter,
-                                                  total,
-                                                  row,
-                                                  output_records,
-                                                  output_file_path) for row_counter,row in cu_export_df.iterrows())
+        try:
+            with sync_playwright() as playwright:
+                with playwright.chromium.launch() as browser:
+                    page = browser.new_context(user_agent=self.USER_AGENT).new_page()
+                    response = page.goto(url, wait_until="domcontentloaded")
+                    error_name, error_message = self.get_errors(response.status)
+                    return ScrapingResponse(
+                        url=url,
+                        response_code=response.status,
+                        page_content=page.content(),
+                        error_name=error_name,
+                        error_message=error_message,
+                    )
+        except Exception as ex:
+            self.logger.error("scrape_url_using_playwright", ex)
+            return ScrapingResponse(
+                url=url,
+                response_code=HTTPStatus.INTERNAL_SERVER_ERROR.value,
+                page_content="",
+                error_name="Exception",
+                error_message=str(ex),
+            )
 
-        return [s for s in scraped_councils if s is not None]
-    
-    def do_council_scraping_output_require_retry(self, output):
-        # No Results found
-        if output.get("scraped_text").startswith("No results found."):
-            return True
+    def scrape_url(self, url) -> ScrapingResponse:
+        response = self.scrape_url_using_requests(url)
+        if response.response_code != HTTPStatus.OK.value:
+            response = self.scrape_url_using_playwright(url)
 
-        # Exceptions
-        if output.get("has_error", False) and not self.string_helper.is_null_or_whitespace(output.get("address")):
-            return True
-        
-        return False
-
-    def retry_failed_scraping_of_council_name(self, output_record, new_output_file_path: str, existing_records, row_counter, total):
-        existing_record = output_record.get("org_id") in existing_records
-        if existing_record:
-            return
-        
-        if self.do_council_scraping_output_require_retry(output_record):
-            print(f'Scraping council for org {output_record.get("org_id")}, address {output_record.get("address")}. Progress {row_counter + 1} of {total}')
-            response = self.find_council_by_address(output_record.get("address"))
-            output_record["error_message"] = response.error_message
-            output_record["has_error"] = response.has_error
-            output_record["council_scraped"] = response.council_name
-            output_record["electorate_state_scraped"] = response.electoral_ward
-            output_record["is_council_correct"] = output_record["council"] == response.council_name    
-            output_record["scraped_text"] = response.text
- 
-        self.file_helper.write_jsonlines(new_output_file_path, output_record)
-
-    def retry_failed_scraping_of_council_names(self, output_file_path: str, new_output_file_path: str, n_jobs=3):
-        output_records = self.file_helper.read_jsonlines_all(output_file_path)
-
-        total = len(output_records)
-        existing_records = []
-        if self.file_helper.does_file_exist(new_output_file_path):
-            existing_records = self.get_output_records_organisations(new_output_file_path)
-        Parallel(n_jobs=n_jobs)(delayed(self.retry_failed_scraping_of_council_name)(output_record, new_output_file_path, existing_records, row_counter, total) for row_counter, output_record in enumerate(output_records))
+        return response

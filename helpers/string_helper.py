@@ -1,11 +1,16 @@
 """Helper methods for string"""
 
-# pylint: disable=too-few-public-methods
 class StringHelper():
     """string helper methods"""
 
     def is_null_or_whitespace(self, input_str: str):
         """Check if the input string is null or whitespace"""
+        input_str = str(input_str)
         return not input_str or input_str.isspace()
+    
+    def validate_null_or_empty(self, input_str: str, param_name: str):
+        if self.is_null_or_whitespace(param_name):
+            raise ValueError("Param name is required")
 
-# pylint: enable=too-few-public-methods
+        if self.is_null_or_whitespace(input_str):
+            raise ValueError(f"{param_name} is null or empty")
