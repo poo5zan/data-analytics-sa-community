@@ -17,6 +17,7 @@ from helpers.settings_helper import SettingsHelper
 from helpers.string_helper import StringHelper
 from http import HTTPStatus
 from playwright.sync_api import sync_playwright
+from playwright.async_api import async_playwright
 from scraping.html_helper import HtmlHelper
 from scraping.scraping_response import ScrapingResponse
 
@@ -115,7 +116,10 @@ class WebScraping:
         self.validate_url(url)
         try:
             self.logger.info(f"scrape_url: {url}")
-            response = requests.get(url)
+            headers = {
+                'User-Agent': self.USER_AGENT
+            }
+            response = requests.get(url, headers=headers)
             error_name, error_message = self.get_errors(response.status_code)
             return ScrapingResponse(
                 url=url,
@@ -126,6 +130,35 @@ class WebScraping:
             )
         except Exception as ex:
             self.logger.error("scrape_url %s", ex)
+            return ScrapingResponse(
+                url=url,
+                response_code=HTTPStatus.INTERNAL_SERVER_ERROR.value,
+                page_content="",
+                error_name="Exception",
+                error_message=str(ex),
+            )
+
+    async def scrape_url_using_playwright_async(self, url: str) -> ScrapingResponse:
+        """
+        Retrieves html of a webpage  using Playwright async
+        """
+        self.validate_url(url)
+
+        try:
+            async with async_playwright() as playwright:
+                async with await playwright.chromium.launch() as browser:
+                    page = await browser.new_page()
+                    response = await page.goto(url, wait_until="domcontentloaded")
+                    error_name, error_message = self.get_errors(response.status)
+                    return ScrapingResponse(
+                        url=url,
+                        response_code=response.status,
+                        page_content=page.content(),
+                        error_name=error_name,
+                        error_message=error_message,
+                    )
+        except Exception as ex:
+            self.logger.error("scrape_url_using_playwright_async", ex)
             return ScrapingResponse(
                 url=url,
                 response_code=HTTPStatus.INTERNAL_SERVER_ERROR.value,
@@ -167,5 +200,12 @@ class WebScraping:
         response = self.scrape_url_using_requests(url)
         if response.response_code != HTTPStatus.OK.value:
             response = self.scrape_url_using_playwright(url)
+
+        return response
+    
+    async def scrape_url_async(self, url: str) -> ScrapingResponse:
+        response = self.scrape_url_using_requests(url)
+        if response.response_code != HTTPStatus.OK.value:
+            response = await self.scrape_url_using_playwright_async(url)
 
         return response

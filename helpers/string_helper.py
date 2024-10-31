@@ -5,8 +5,7 @@ class StringHelper():
 
     def is_null_or_whitespace(self, input_str: str):
         """Check if the input string is null or whitespace"""
-        input_str = str(input_str)
-        return not input_str or input_str.isspace()
+        return not input_str or str(input_str).isspace()
     
     def validate_null_or_empty(self, input_str: str, param_name: str):
         if self.is_null_or_whitespace(param_name):
