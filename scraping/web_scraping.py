@@ -314,9 +314,9 @@ class WebScraping():
         electorate_state = row["Organisati_Electorate_State_"]
         electorate_federal = row["Organisati_Electorate_Federal_"]
 
-        existing_record = [o for o in output_records if o.get("org_id") == org_id]
-        if len(existing_record) > 0:
-            self.log.info(f"Record exists: Skipping council for org {org_id}, address {address}. Progress {row_counter + 1} of {total}")
+        existing_record = org_id in output_records
+        if existing_record > 0:
+            print(f"Record exists: Skipping council for org {org_id}, address {address}. Progress {row_counter + 1} of {total}")
             return None
 
         print(f"Scraping council for org {org_id}, address {address}. Progress {row_counter + 1} of {total}")
@@ -358,6 +358,10 @@ class WebScraping():
         if not self.string_helper.is_null_or_whitespace(output_file_path):
             self.file_helper.write_jsonlines(output_file_path, scraped_council)
 
+    def get_output_records_organisations(self, output_file_path):
+        output_records = self.file_helper.read_jsonlines_all(output_file_path)
+        return [o.get('org_id') for o in output_records]
+
     def scrape_council_names_based_on_cu_export_df(self,
                                                    cu_export_df : pd.DataFrame,
                                                    output_file_path: str = "",
@@ -366,7 +370,7 @@ class WebScraping():
         output_records = []
         if not self.string_helper.is_null_or_whitespace(output_file_path) and self.file_helper.does_file_exist(output_file_path):
             self.log.info("Reading output records")
-            output_records = self.file_helper.read_jsonlines_all(output_file_path)
+            output_records = self.get_output_records_organisations(output_file_path)
             self.log.info("Completed reading output records")
        
         scraped_councils = Parallel(n_jobs=n_jobs)(delayed(self.scrape_council_name_based_on_cu_export_df)(row_counter,
