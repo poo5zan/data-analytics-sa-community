@@ -58,6 +58,7 @@ class MetadataHelper():
         self.date_helper = DateHelper()
 
     # pylint: disable=too-many-arguments
+    # pylint: disable=too-many-positional-arguments
     def new_metadata(self,
                     data_frequency: DataFrequency,
                     module: DataModule,
@@ -87,6 +88,7 @@ class MetadataHelper():
             }
         }
     # pylint: enable=too-many-arguments
+    # pylint: enable=too-many-positional-arguments
 
     def sort_metadatas(self, metadatas):
         """sort metadata first by data_frequency and then by module"""
