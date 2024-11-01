@@ -1,28 +1,30 @@
+"""Scrape council name"""
+
 import re
 import logging
+from threading import Semaphore, Thread
 import pandas as pd
 from requests.utils import quote
 import requests
 from bs4 import BeautifulSoup
+from joblib import Parallel, delayed
 from dtos.get_data_from_url_request_dto import GetDataFromUrlRequestDto
 from helpers.file_helper import FileHelper
+from helpers.log_helper import log_error
 from helpers.settings_helper import SettingsHelper
 from helpers.string_helper import StringHelper
-from joblib import Parallel, delayed
-from scraping.html_helper import HtmlHelper
 from scraping.find_council_by_address_response import FindCouncilByAddressResponse
-from threading import Semaphore, Thread
-
 from scraping.web_scraping import WebScraping
 
 
 class CouncilNameScrapingService:
+    """Scrape council name"""
+
     def __init__(self) -> None:
         self.logger = logging.getLogger()
         self.settings_helper = SettingsHelper()
         self.string_helper = StringHelper()
         self.file_helper = FileHelper()
-        self.html_helper = HtmlHelper()
         self.web_scraping = WebScraping()
 
     def extract_value_replacing_prefix(self, text_array, prefix):
@@ -35,6 +37,7 @@ class CouncilNameScrapingService:
 
         return ""
 
+    # pylint: disable=broad-exception-caught
     def find_council_by_address(
         self, address: str, timeout_in_seconds=600, is_headless=True
     ) -> FindCouncilByAddressResponse:
@@ -46,16 +49,14 @@ class CouncilNameScrapingService:
         is_headless: if False, a chrome browser will popup,
         else the operation will be done in background
         """
-        if address is None or address == "":
-            raise ValueError("address is required")
+        self.string_helper.validate_null_or_empty(address, "address")
 
         error_message = ""
         has_error = False
         try:
-            address_encoded = quote(address)
             app_id = "db6cce7b773746b4a1d4ce544435f9da"
             base_url = "https://lga-sa.maps.arcgis.com/apps/instant/lookup/index.html"
-            url = f"{base_url}?appid={app_id}&find={address_encoded}"
+            url = f"{base_url}?appid={app_id}&find={quote(address)}"
             self.logger.info("Fetching council for %s", address)
             to_exclude = ["Results:1", "", "Loading..."]
             text = self.web_scraping.get_data_from_url(
@@ -84,11 +85,13 @@ class CouncilNameScrapingService:
         except Exception as ex:
             has_error = True
             error_message = str(ex)
-            self.logger.error("find_council_by_address", ex)
+            log_error(self.logger, "find_council_by_address", ex)
 
         return FindCouncilByAddressResponse(
             address, council_name, electoral_ward, text, has_error, error_message
         )
+
+    # pylint: enable=broad-exception-caught
 
     def find_councils_by_addresses(
         self, addresses: list, is_headless=True, timeout_in_seconds=600
@@ -119,7 +122,7 @@ class CouncilNameScrapingService:
                     all_councils.append(council)
                 except Exception as ex:
                     # simply log the exception, don't raise it further
-                    self.logger.error(ex, exc_info=True)
+                    log_error(self.logger, "find_council", ex)
                     raise ex
 
         all_councils = []
@@ -211,7 +214,7 @@ class CouncilNameScrapingService:
                         }
                     )
                 except Exception as ex:
-                    self.logger.error(ex, exc_info=True)
+                    log_error(self.logger, "find_addr", ex)
                     raise ex
 
         all_address = []
@@ -226,58 +229,72 @@ class CouncilNameScrapingService:
 
         return all_address
 
+    # pylint: disable=too-many-arguments
     def scrape_council_name_based_on_cu_export_df(
         self, row_counter, total, row, output_records, output_file_path
     ):
+        """
+        Scrape council name based on cu export dataframe
+        """
         org_id = row["ID_19"]
         address = str(row["Street_Address_Line_1"]) + " " + str(row["Suburb"])
         council = row["Organisati_Council"]
-        electorate_state = row["Organisati_Electorate_State_"]
-        electorate_federal = row["Organisati_Electorate_Federal_"]
 
         existing_record = org_id in output_records
         if existing_record:
             print(
-                f"Record exists: Skipping council for org {org_id}, address {address}. Progress {row_counter + 1} of {total}"
+                f"Record exists: Skipping council for org {org_id}, address {address}.\
+                      Progress {row_counter + 1} of {total}"
             )
-            return None
-
-        print(
-            f"Scraping council for org {org_id}, address {address}. Progress {row_counter + 1} of {total}"
-        )
-
-        error_message = ""
-        if self.string_helper.is_null_or_whitespace(address):
-            error_message = "address is null or empty"
         else:
-            address_cleaned = address.strip()
-            council_by_address_response = self.find_council_by_address(address_cleaned)
-            error_message = council_by_address_response.error_message
+            print(
+                f"Scraping council for org {org_id}, address {address}.\
+                      Progress {row_counter + 1} of {total}"
+            )
 
-        scraped_council = {
-            "org_id": org_id,
-            "address": address,
-            "council": council,
-            "electorate_state": electorate_state,
-            "electorate_federal": electorate_federal,
-            "error_message": error_message,
-            "has_error": council_by_address_response.has_error,
-            "council_scraped": council_by_address_response.council_name,
-            "electorate_state_scraped": council_by_address_response.electoral_ward,
-            "is_council_correct": council == council_by_address_response.council_name,
-            "scraped_text": council_by_address_response.text,
-        }
+            error_message = ""
+            if self.string_helper.is_null_or_whitespace(address):
+                error_message = "address is null or empty"
+            else:
+                address_cleaned = address.strip()
+                council_by_address_response = self.find_council_by_address(
+                    address_cleaned
+                )
+                error_message = council_by_address_response.error_message
 
-        if not self.string_helper.is_null_or_whitespace(output_file_path):
-            self.file_helper.write_jsonlines(output_file_path, scraped_council)
+            scraped_council = {
+                "org_id": org_id,
+                "address": address,
+                "council": council,
+                "electorate_state": row["Organisati_Electorate_State_"],
+                "electorate_federal": row["Organisati_Electorate_Federal_"],
+                "error_message": error_message,
+                "has_error": council_by_address_response.has_error,
+                "council_scraped": council_by_address_response.council_name,
+                "electorate_state_scraped": council_by_address_response.electoral_ward,
+                "is_council_correct": council
+                == council_by_address_response.council_name,
+                "scraped_text": council_by_address_response.text,
+            }
+
+            if not self.string_helper.is_null_or_whitespace(output_file_path):
+                self.file_helper.write_jsonlines(output_file_path, scraped_council)
+
+    # pylint: disable=too-many-arguments
 
     def get_output_records_organisations(self, output_file_path):
+        """
+        extract organisation ids
+        """
         output_records = self.file_helper.read_jsonlines_all(output_file_path)
         return [o.get("org_id") for o in output_records]
 
     def scrape_council_names_based_on_cu_export_df(
         self, cu_export_df: pd.DataFrame, output_file_path: str = "", n_jobs=3
     ):
+        """
+        Scrape council name based on cu export file
+        """
         total = len(cu_export_df)
         output_records = []
         if not self.string_helper.is_null_or_whitespace(
@@ -287,16 +304,17 @@ class CouncilNameScrapingService:
             output_records = self.get_output_records_organisations(output_file_path)
             self.logger.info("Completed reading output records")
 
-        scraped_councils = Parallel(n_jobs=n_jobs)(
+        Parallel(n_jobs=n_jobs)(
             delayed(self.scrape_council_name_based_on_cu_export_df)(
                 row_counter, total, row, output_records, output_file_path
             )
             for row_counter, row in cu_export_df.iterrows()
         )
 
-        return [s for s in scraped_councils if s is not None]
-
     def do_council_scraping_output_require_retry(self, output):
+        """
+        Check if the retry is required
+        """
         # No Results found
         if output.get("scraped_text").startswith("No results found."):
             return True
@@ -309,6 +327,7 @@ class CouncilNameScrapingService:
 
         return False
 
+    # pylint: disable=too-many-arguments
     def retry_failed_scraping_of_council_name(
         self,
         output_record,
@@ -317,13 +336,18 @@ class CouncilNameScrapingService:
         row_counter,
         total,
     ):
+        """
+        Retry scraping
+        """
         existing_record = output_record.get("org_id") in existing_records
         if existing_record:
             return
 
         if self.do_council_scraping_output_require_retry(output_record):
             print(
-                f'Scraping council for org {output_record.get("org_id")}, address {output_record.get("address")}. Progress {row_counter + 1} of {total}'
+                f'Scraping council for org {output_record.get("org_id")},\
+                    address {output_record.get("address")}. \
+                    Progress {row_counter + 1} of {total}'
             )
             response = self.find_council_by_address(output_record.get("address"))
             output_record["error_message"] = response.error_message
@@ -337,9 +361,14 @@ class CouncilNameScrapingService:
 
         self.file_helper.write_jsonlines(new_output_file_path, output_record)
 
+    # pylint: enable=too-many-arguments
+
     def retry_failed_scraping_of_council_names(
         self, output_file_path: str, new_output_file_path: str, n_jobs=3
     ):
+        """
+        Retry Failed scraping jobs for council names
+        """
         output_records = self.file_helper.read_jsonlines_all(output_file_path)
 
         total = len(output_records)

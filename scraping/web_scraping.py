@@ -5,22 +5,27 @@ Web scraping
 import logging
 import time
 from datetime import datetime
+from http import HTTPStatus
+import requests
+import backoff
 from selenium.webdriver.common.by import By
 from selenium import webdriver
 from selenium.common.exceptions import TimeoutException as SeleniumTimeoutException
 from selenium.common.exceptions import NoSuchElementException
-import backoff
-import requests
-from dtos.get_data_from_url_request_dto import GetDataFromUrlRequestDto
-from helpers.file_helper import FileHelper
-from helpers.settings_helper import SettingsHelper
-from helpers.string_helper import StringHelper
-from http import HTTPStatus
+from selenium.common.exceptions import WebDriverException
+
+# pylint: disable=import-error
 from playwright.sync_api import sync_playwright
 from playwright.async_api import async_playwright
-from scraping.html_helper import HtmlHelper
+
+# pylint: enable=import-error
+from dtos.get_data_from_url_request_dto import GetDataFromUrlRequestDto
+from helpers.log_helper import log_error
+from helpers.string_helper import StringHelper
+from helpers.html_helper import HtmlHelper
 from scraping.scraping_response import ScrapingResponse
-from selenium.common.exceptions import WebDriverException
+
+# pylint: disable=broad-exception-caught
 
 
 class WebScraping:
@@ -28,13 +33,13 @@ class WebScraping:
 
     def __init__(self) -> None:
         self.logger = logging.getLogger()
-        self.settings_helper = SettingsHelper()
         self.string_helper = StringHelper()
-        self.file_helper = FileHelper()
         self.html_helper = HtmlHelper()
-        self.USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0.0.0 Safari/537.36"
+        self.user_agent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36\
+              (KHTML, like Gecko) Chrome/129.0.0.0 Safari/537.36"
 
     def validate_url(self, url):
+        """validate url"""
         if self.string_helper.is_null_or_whitespace(url):
             raise ValueError("url is required")
 
@@ -52,6 +57,9 @@ class WebScraping:
         return options
 
     def find_element_by_xpath(self, driver, xpath):
+        """
+        Finds the element in the html by xpath
+        """
         try:
             return driver.find_element(by=By.XPATH, value=xpath).text
         except NoSuchElementException as ex:
@@ -100,25 +108,32 @@ class WebScraping:
                 difference_time = datetime.now() - start_time
                 if difference_time.total_seconds() > request_dto.timeout_in_seconds:
                     self.logger.info(
-                        f"Wait Timeout of {request_dto.timeout_in_seconds} seconds exceeded"
+                        "Wait Timeout of %s seconds exceeded",
+                        request_dto.timeout_in_seconds,
                     )
                     break
 
         return text
 
     def get_errors(self, status_code: int):
+        """
+        Get error name and description for http status code
+        """
         if status_code != HTTPStatus.OK.value:
             http_status = HTTPStatus(status_code)
             return http_status.name, http_status.description
-        else:
-            return "", ""
 
-    def scrape_url_using_requests(self, url: str) -> ScrapingResponse:
+        return "", ""
+
+    def scrape_url_using_requests(
+        self, url: str, timeout_seconds=60
+    ) -> ScrapingResponse:
+        """Scrap url using requests library"""
         self.validate_url(url)
         try:
-            self.logger.info(f"scrape_url: {url}")
-            headers = {"User-Agent": self.USER_AGENT}
-            response = requests.get(url, headers=headers)
+            self.logger.info("scrape_url: %s", url)
+            headers = {"User-Agent": self.user_agent}
+            response = requests.get(url, headers=headers, timeout=timeout_seconds)
             error_name, error_message = self.get_errors(response.status_code)
             return ScrapingResponse(
                 url=url,
@@ -128,7 +143,7 @@ class WebScraping:
                 error_message=error_message,
             )
         except Exception as ex:
-            self.logger.error("scrape_url %s", ex)
+            log_error(self.logger, "scrape_url", ex)
             return ScrapingResponse(
                 url=url,
                 response_code=HTTPStatus.INTERNAL_SERVER_ERROR.value,
@@ -157,7 +172,7 @@ class WebScraping:
                         error_message=error_message,
                     )
         except Exception as ex:
-            self.logger.error("scrape_url_using_playwright_async", ex)
+            log_error(self.logger, "scrape_url_using_playwright_async", ex)
             return ScrapingResponse(
                 url=url,
                 response_code=HTTPStatus.INTERNAL_SERVER_ERROR.value,
@@ -175,7 +190,7 @@ class WebScraping:
         try:
             with sync_playwright() as playwright:
                 with playwright.chromium.launch() as browser:
-                    page = browser.new_context(user_agent=self.USER_AGENT).new_page()
+                    page = browser.new_context(user_agent=self.user_agent).new_page()
                     response = page.goto(url, wait_until="domcontentloaded")
                     error_name, error_message = self.get_errors(response.status)
                     return ScrapingResponse(
@@ -186,7 +201,7 @@ class WebScraping:
                         error_message=error_message,
                     )
         except Exception as ex:
-            self.logger.error("scrape_url_using_playwright", ex)
+            log_error(self.logger, "scrape_url_using_playwright", ex)
             return ScrapingResponse(
                 url=url,
                 response_code=HTTPStatus.INTERNAL_SERVER_ERROR.value,
@@ -196,7 +211,7 @@ class WebScraping:
             )
 
     def scrape_url_using_selenium(self, url: str, time_to_wait=5):
-        """scrape url and returns html"""
+        """scrape url using selenium and returns html"""
         self.validate_url(url)
 
         page_source = ""
@@ -210,7 +225,7 @@ class WebScraping:
                 page_source = driver.page_source
                 response_code = HTTPStatus.OK.value
         except WebDriverException as wde:
-            self.logger.error("scrape_url WebDriverException %s", wde)
+            log_error(self.logger, "scrape_url WebDriverException", wde)
             error_name = "WebDriverException"
             if "ERR_NAME_NOT_RESOLVED" in wde.msg:
                 response_code = HTTPStatus.NOT_FOUND.value
@@ -218,12 +233,11 @@ class WebScraping:
             else:
                 response_code = HTTPStatus.INTERNAL_SERVER_ERROR.value
                 error_message = str(wde)
-
         except Exception as ex:
             error_name = "Exception"
             response_code = HTTPStatus.INTERNAL_SERVER_ERROR.value
             error_message = str(ex)
-            self.logger.error("scrape_url Exception %s", ex)
+            log_error(self.logger, "scrape_url Exception", ex)
 
         return ScrapingResponse(
             url=url,
@@ -234,19 +248,35 @@ class WebScraping:
         )
 
     def scrape_url(self, url) -> ScrapingResponse:
+        """
+        Scrape URL. The order of preference is
+        1. requests library
+        2. playwright
+        3. selenium
+        """
         self.validate_url(url)
-        scraper_options = [self.scrape_url_using_requests, self.scrape_url_using_playwright, self.scrape_url_using_selenium]
+        scraper_options = [
+            self.scrape_url_using_requests,
+            self.scrape_url_using_playwright,
+            self.scrape_url_using_selenium,
+        ]
         for scraper in scraper_options:
             response = scraper(url)
             if response.response_code == HTTPStatus.OK.value:
                 return response
-            
+
         # return the last response
         return response
 
     async def scrape_url_async(self, url: str) -> ScrapingResponse:
+        """
+        Scrape url asynchronously
+        """
         response = self.scrape_url_using_requests(url)
         if response.response_code != HTTPStatus.OK.value:
             response = await self.scrape_url_using_playwright_async(url)
 
         return response
+
+
+# pylint: enable=broad-exception-caught
