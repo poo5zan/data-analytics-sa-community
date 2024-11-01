@@ -222,96 +222,95 @@
 #         return analytics.reports().batchGet(body=request_body).execute()
 #         # pylint: enable=no-member
 
-    # def get_data(self,
-    #              request_config: GoogleAnalyticsRequestConfig,
-    #              filter_clause: GoogleAnalyticsFilterClause):
-    #     """get all data"""
-    #     results = []
-    #     page_token = filter_clause.page_dto.page_token
+# def get_data(self,
+#              request_config: GoogleAnalyticsRequestConfig,
+#              filter_clause: GoogleAnalyticsFilterClause):
+#     """get all data"""
+#     results = []
+#     page_token = filter_clause.page_dto.page_token
 
-    #     view_id = ''
-    #     if filter_clause.api_version == GoogleApiVersion.VERSION_3:
-    #         view_id = self.settings_helper.get_google_analytics_view_id_v3()
-    #     elif filter_clause.api_version == GoogleApiVersion.VERSION_4:
-    #         view_id = self.settings_helper.get_google_analytics_view_id_v4()
-    #     else:
-    #         raise ValueError(f'GoogleApiVersion: {filter_clause.api_version} is not supported')
+#     view_id = ''
+#     if filter_clause.api_version == GoogleApiVersion.VERSION_3:
+#         view_id = self.settings_helper.get_google_analytics_view_id_v3()
+#     elif filter_clause.api_version == GoogleApiVersion.VERSION_4:
+#         view_id = self.settings_helper.get_google_analytics_view_id_v4()
+#     else:
+#         raise ValueError(f'GoogleApiVersion: {filter_clause.api_version} is not supported')
 
-    #     while True:
-    #         new_page_dto = PageDto(filter_clause.page_dto.page_size, page_token)
-    #         filter_clause.set_page_dto(new_page_dto)
-    #         # response = self.get_batch_data(view_id=view_id,
-    #         #                                request_config=request_config,
-    #         #                                filter_clause=filter_clause)
+#     while True:
+#         new_page_dto = PageDto(filter_clause.page_dto.page_size, page_token)
+#         filter_clause.set_page_dto(new_page_dto)
+#         # response = self.get_batch_data(view_id=view_id,
+#         #                                request_config=request_config,
+#         #                                filter_clause=filter_clause)
 
-    #         response = self.get_batch_data_v4(property_id=view_id,
-    #                                        request_config=request_config,
-    #                                        filter_clause=filter_clause)
-    #         self.log.debug('request_config %s, date_range %s,\
-    #                                     page_dto %s, filter_clause %s, response %s',
-    #                                    request_config.to_dict(),
-    #                                    filter_clause.date_range.to_dict(),
-    #                                    filter_clause.page_dto.to_dict(),
-    #                                    filter_clause.to_dict(),
-    #                                    response)
-    #         results.extend(self.extract_data_from_response(
-    #             response, filter_clause.date_range))
-    #         page_token = response['reports'][0].get('nextPageToken')
+#         response = self.get_batch_data_v4(property_id=view_id,
+#                                        request_config=request_config,
+#                                        filter_clause=filter_clause)
+#         self.log.debug('request_config %s, date_range %s,\
+#                                     page_dto %s, filter_clause %s, response %s',
+#                                    request_config.to_dict(),
+#                                    filter_clause.date_range.to_dict(),
+#                                    filter_clause.page_dto.to_dict(),
+#                                    filter_clause.to_dict(),
+#                                    response)
+#         results.extend(self.extract_data_from_response(
+#             response, filter_clause.date_range))
+#         page_token = response['reports'][0].get('nextPageToken')
 
-    #         total_rows = response.get('reports')[0].get(
-    #             'data').get('totals')[0]['values'][0]
-    #         self.log.debug(
-    #             "Retrieved %s of %s ", len(results), total_rows)
+#         total_rows = response.get('reports')[0].get(
+#             'data').get('totals')[0]['values'][0]
+#         self.log.debug(
+#             "Retrieved %s of %s ", len(results), total_rows)
 
-    #         if page_token is None:
-    #             self.log.debug("All data has been retrieved")
-    #             break
+#         if page_token is None:
+#             self.log.debug("All data has been retrieved")
+#             break
 
-    #     return results
+#     return results
 
-    # def get_columns_to_rename(self, version: GoogleApiVersion):
-    #     """returns columns to rename"""
-    #     if version == GoogleApiVersion.VERSION_3:
-    #         return {
-    #             "ga:sessions": "sessions",
-    #             "ga:userGender": "gender",
-    #             "ga:landingPagePath": "landing_page",
-    #             "ga:deviceCategory": "device_category",
-    #             "ga:sourceMedium": "source_medium",
-    #             "ga:userAgeBracket": "age_bracket",
-    #             "ga:customVarValue1": "dataset_id",
-    #             "ga:customVarValue2": "post_code",
-    #             "ga:customVarValue3": "state",
-    #             "ga:customVarValue4": "subject",
-    #             "ga:customVarValue5": "org_type",
-    #             "ga:pageviews": "page_views"
-    #         }
-    #     elif version == GoogleApiVersion.VERSION_4:
-    #         return {
-    #             "ga:customVarValue1": "dataset_id",
-    #             "ga:customVarValue2": "post_code",
-    #             "ga:customVarValue3": "state",
-    #             "ga:customVarValue4": "subject",
-    #             "ga:customVarValue5": "org_type",
-    #             "ga:sessions": "sessions",
-    #             "ga:landingPagePath": "landing_page",
-    #             "ga:pageviews": "page_views"
-    #         }
-       
-    #     raise ValueError(f"google Api Version {version} is Invalid.")
+# def get_columns_to_rename(self, version: GoogleApiVersion):
+#     """returns columns to rename"""
+#     if version == GoogleApiVersion.VERSION_3:
+#         return {
+#             "ga:sessions": "sessions",
+#             "ga:userGender": "gender",
+#             "ga:landingPagePath": "landing_page",
+#             "ga:deviceCategory": "device_category",
+#             "ga:sourceMedium": "source_medium",
+#             "ga:userAgeBracket": "age_bracket",
+#             "ga:customVarValue1": "dataset_id",
+#             "ga:customVarValue2": "post_code",
+#             "ga:customVarValue3": "state",
+#             "ga:customVarValue4": "subject",
+#             "ga:customVarValue5": "org_type",
+#             "ga:pageviews": "page_views"
+#         }
+#     elif version == GoogleApiVersion.VERSION_4:
+#         return {
+#             "ga:customVarValue1": "dataset_id",
+#             "ga:customVarValue2": "post_code",
+#             "ga:customVarValue3": "state",
+#             "ga:customVarValue4": "subject",
+#             "ga:customVarValue5": "org_type",
+#             "ga:sessions": "sessions",
+#             "ga:landingPagePath": "landing_page",
+#             "ga:pageviews": "page_views"
+#         }
 
-    # def get_data_as_df(self,
-    #              request_config: GoogleAnalyticsRequestConfig,
-    #              filter_clause: GoogleAnalyticsFilterClause):
-    #     data = self.get_data(request_config, filter_clause)
+#     raise ValueError(f"google Api Version {version} is Invalid.")
 
-    #     data_df = pd.DataFrame(data)
-    #     # rename columns
+# def get_data_as_df(self,
+#              request_config: GoogleAnalyticsRequestConfig,
+#              filter_clause: GoogleAnalyticsFilterClause):
+#     data = self.get_data(request_config, filter_clause)
 
-    #     columns_to_rename = self.get_columns_to_rename(filter_clause.api_version)
-    #     for key, value in columns_to_rename.items():
-    #         if key in data_df.columns:
-    #             data_df = data_df.rename(columns={key:value})
-        
-    #     return self.convert_data_types(data_df)
+#     data_df = pd.DataFrame(data)
+#     # rename columns
 
+#     columns_to_rename = self.get_columns_to_rename(filter_clause.api_version)
+#     for key, value in columns_to_rename.items():
+#         if key in data_df.columns:
+#             data_df = data_df.rename(columns={key:value})
+
+#     return self.convert_data_types(data_df)

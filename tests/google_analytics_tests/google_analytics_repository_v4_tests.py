@@ -1,8 +1,9 @@
 import sys
 import os
+from datetime import date
 # insert current path to system path, so that we can import python file
 sys.path.insert(1, os.getcwd())
-from datetime import date
+
 from dtos.date_range_dto import DateRangeDto
 from dtos.page_dto import PageDto
 from google_analytics_module.dtos.google_analytics_filter_clause_dto import GoogleAnalyticsFilterClause
