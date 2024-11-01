@@ -1,0 +1,14 @@
+class FindCouncilByAddressResponse():
+    def __init__(self,
+                 address: str,
+                 council_name: str,
+                 electoral_ward: str,
+                 text: str,
+                 has_error: bool,
+                 error_message: str) -> None:
+        self.address = address
+        self.council_name = council_name
+        self.electoral_ward = electoral_ward
+        self.text = text
+        self.has_error = has_error
+        self.error_message = error_message
