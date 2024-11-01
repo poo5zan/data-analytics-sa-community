@@ -4,6 +4,7 @@
 class GetDataFromUrlRequestDto():
     """request config page size and page token"""
     # pylint: disable=too-many-arguments
+    # pylint: disable=too-many-positional-arguments
     def __init__(self,
                  url: str,
                  is_headless: bool,
@@ -19,6 +20,7 @@ class GetDataFromUrlRequestDto():
         self.no_content_xpath = no_content_xpath
 
     # pylint: enable=too-many-arguments
+    # pylint: enable=too-many-positional-arguments
 
     def to_dict(self):
         """returns dictionary representation of dto"""

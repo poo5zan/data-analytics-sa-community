@@ -34,6 +34,7 @@ class GoogleAnalyticsService:
         self.pandas_helper = PandasHelper()
 
     # pylint: disable=too-many-arguments
+    # pylint: disable=too-many-positional-arguments
     def get_data(
         self,
         dataset_id: str,
@@ -60,8 +61,10 @@ class GoogleAnalyticsService:
         return results
 
     # pylint: enable=too-many-arguments
+    # pylint: enable=too-many-positional-arguments
 
     # pylint: disable=too-many-arguments
+    # pylint: disable=too-many-positional-arguments
     def get_sessions_by_landing_page(
         self,
         dataset_id: str,
@@ -93,6 +96,7 @@ class GoogleAnalyticsService:
         )
 
     # pylint: enable=too-many-arguments
+    # pylint: enable=too-many-positional-arguments
 
     def get_sessions_by_landing_page_as_df(
         self,
@@ -109,6 +113,7 @@ class GoogleAnalyticsService:
         return self.pandas_helper.convert_data_types(results_df)
 
     # pylint: disable=too-many-arguments
+    # pylint: disable=too-many-positional-arguments
     def get_sessions_by_organisation_id(
         self,
         start_date: date,
@@ -133,6 +138,7 @@ class GoogleAnalyticsService:
         return {"organisation_id": organisation_id, "sessions_count": sessions_count}
 
     # pylint: enable=too-many-arguments
+    # pylint: enable=too-many-positional-arguments
 
     def get_sessions_by_organisation_ids(
         self, start_date: date, end_date: date, organisation_ids: list[str], n_jobs=5

@@ -107,8 +107,7 @@ class FileHelper:
         """
 
         with jsonlines.open(file_path) as reader:
-            for obj in reader:
-                yield obj
+            yield from reader
 
     def read_jsonlines_all(self, file_path: str):
         """

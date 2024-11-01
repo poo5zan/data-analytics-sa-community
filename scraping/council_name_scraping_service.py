@@ -230,6 +230,7 @@ class CouncilNameScrapingService:
         return all_address
 
     # pylint: disable=too-many-arguments
+    # pylint: disable=too-many-positional-arguments
     def scrape_council_name_based_on_cu_export_df(
         self, row_counter, total, row, output_records, output_file_path
     ):
@@ -281,6 +282,7 @@ class CouncilNameScrapingService:
                 self.file_helper.write_jsonlines(output_file_path, scraped_council)
 
     # pylint: disable=too-many-arguments
+    # pylint: disable=too-many-positional-arguments
 
     def get_output_records_organisations(self, output_file_path):
         """
@@ -328,6 +330,7 @@ class CouncilNameScrapingService:
         return False
 
     # pylint: disable=too-many-arguments
+    # pylint: disable=too-many-positional-arguments
     def retry_failed_scraping_of_council_name(
         self,
         output_record,
@@ -362,6 +365,7 @@ class CouncilNameScrapingService:
         self.file_helper.write_jsonlines(new_output_file_path, output_record)
 
     # pylint: enable=too-many-arguments
+    # pylint: enable=too-many-positional-arguments
 
     def retry_failed_scraping_of_council_names(
         self, output_file_path: str, new_output_file_path: str, n_jobs=3

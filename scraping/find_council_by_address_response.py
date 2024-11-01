@@ -3,6 +3,7 @@
 
 # pylint: disable=too-few-public-methods
 # pylint: disable=too-many-arguments
+# pylint: disable=too-many-positional-arguments
 class FindCouncilByAddressResponse:
     """DTO for Find Council By Address"""
 
@@ -25,3 +26,4 @@ class FindCouncilByAddressResponse:
 
 # pylint: enable=too-few-public-methods
 # pylint: enable=too-many-arguments
+# pylint: enable=too-many-positional-arguments
