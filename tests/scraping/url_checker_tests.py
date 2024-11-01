@@ -2,8 +2,8 @@ import sys
 import os
 # insert current path to system path, so that we can import python file
 sys.path.insert(1, os.getcwd())
-from scraping.url_checker import UrlChecker
 import pandas as pd
+from scraping.url_checker import UrlChecker
 
 url_checker = UrlChecker()
 url = "https://sacommunity.org/node/1123"

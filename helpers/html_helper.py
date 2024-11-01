@@ -20,4 +20,4 @@ class HtmlHelper():
         self.string_helper.validate_null_or_empty(html, "html")
         soup = BeautifulSoup(html, "html.parser")
         anchor_tags = soup.findAll('a')
-        return list(set([a.get("href") for a in anchor_tags if self.is_valid_url(a.get("href"))]))
+        return list({a.get("href") for a in anchor_tags if self.is_valid_url(a.get("href"))})
